@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Investiční kalkulačka nemovitostí</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen">
+
+  <div id="config-warning" class="hidden bg-amber-100 text-amber-900 text-sm text-center py-2 px-4 border-b border-amber-300">
+    ⚠️ Supabase zatím není nakonfigurován. Uprav soubor <code>js/config.js</code> podle návodu v <code>README.md</code>.
+  </div>
+
+  <!-- ===================== PŘIHLÁŠENÍ ===================== -->
+  <div id="auth-screen" class="hidden flex items-center justify-center min-h-screen px-4">
+    <div class="w-full max-w-sm bg-white rounded-2xl shadow-lg p-8 border border-slate-200">
+      <h1 class="text-xl font-bold mb-1 text-center">Investiční kalkulačka</h1>
+      <p class="text-sm text-slate-500 text-center mb-6">Přehled nemovitostí, úvěrů a zhodnocení</p>
+
+      <form id="auth-form" class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium mb-1" for="auth-email">E-mail</label>
+          <input id="auth-email" type="email" required autocomplete="email"
+                 class="w-full rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1" for="auth-password">Heslo</label>
+          <input id="auth-password" type="password" required autocomplete="current-password" minlength="6"
+                 class="w-full rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+
+        <p id="auth-error" class="hidden text-sm text-red-600"></p>
+        <p id="auth-info" class="hidden text-sm text-emerald-600"></p>
+
+        <button id="btn-login" type="submit"
+                class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg py-2 transition">
+          Přihlásit se
+        </button>
+        <button id="btn-register" type="button"
+                class="w-full bg-white hover:bg-slate-100 text-slate-700 font-medium rounded-lg py-2 border border-slate-300 transition">
+          Vytvořit účet
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ===================== APLIKACE ===================== -->
+  <div id="app-screen" class="hidden">
+    <header class="bg-white border-b border-slate-200">
+      <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+        <h1 class="font-bold text-lg">🏠 Investiční kalkulačka</h1>
+        <div class="flex items-center gap-3 text-sm">
+          <span id="user-email" class="text-slate-500"></span>
+          <button id="btn-logout" class="text-red-600 hover:underline">Odhlásit</button>
+        </div>
+      </div>
+      <nav class="max-w-6xl mx-auto px-4 flex gap-1 -mb-px">
+        <button class="tab-btn tab-active" data-tab="tab-overview">Přehled</button>
+        <button class="tab-btn" data-tab="tab-properties">Nemovitosti</button>
+        <button class="tab-btn" data-tab="tab-loans">Úvěry / fixace</button>
+        <button class="tab-btn" data-tab="tab-settings">Nastavení</button>
+      </nav>
+    </header>
+
+    <main class="max-w-6xl mx-auto px-4 py-6">
+
+      <!-- PŘEHLED -->
+      <section id="tab-overview" class="tab-panel">
+        <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
+          <div class="kpi-card">
+            <div class="kpi-label">Majetek (tržní hodnota)</div>
+            <div id="kpi-assets" class="kpi-value">—</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Dluh</div>
+            <div id="kpi-debt" class="kpi-value">—</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Vlastní majetek</div>
+            <div id="kpi-networth" class="kpi-value">—</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Poměr zadlužení</div>
+            <div id="kpi-debtratio" class="kpi-value">—</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Cashflow (nájem − splátky)</div>
+            <div id="kpi-cashflow" class="kpi-value">—</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Roční zhodnocení</div>
+            <div id="kpi-appreciation" class="kpi-value">—</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Ztráta inflací</div>
+            <div id="kpi-inflation-loss" class="kpi-value">—</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Zbývá po inflaci</div>
+            <div id="kpi-real-appreciation" class="kpi-value">—</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Majetek po zhodnocení</div>
+            <div id="kpi-projected-value" class="kpi-value">—</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- NEMOVITOSTI -->
+      <section id="tab-properties" class="tab-panel hidden">
+        <div class="bg-white rounded-xl border border-slate-200 p-4 mb-6">
+          <h2 id="property-form-title" class="font-semibold mb-3">Přidat nemovitost</h2>
+          <form id="property-form" class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+            <input type="hidden" name="id" />
+            <label class="flex flex-col gap-1 col-span-2">Název
+              <input name="name" required class="input" />
+            </label>
+            <label class="flex flex-col gap-1">Nájem (Kč/měs)
+              <input name="rent" type="number" step="1" class="input" />
+            </label>
+            <label class="flex flex-col gap-1">Splátka (Kč/měs)
+              <input name="payment" type="number" step="1" class="input" />
+            </label>
+            <label class="flex flex-col gap-1">Tržní hodnota (Kč)
+              <input name="market_value" type="number" step="1" class="input" />
+            </label>
+            <label class="flex flex-col gap-1">Pořizovací cena (Kč)
+              <input name="acquisition_price" type="number" step="1" class="input" />
+            </label>
+            <label class="flex flex-col gap-1">Roční růst hodnoty (%)
+              <input name="growth_rate" type="number" step="0.1" class="input" />
+            </label>
+            <label class="flex flex-col gap-1">Datum pořízení
+              <input name="acquisition_date" type="date" class="input" />
+            </label>
+            <label class="flex flex-col gap-1">Časový test (roky)
+              <select name="tax_exempt_years" class="input">
+                <option value="5">5</option>
+                <option value="10" selected>10</option>
+              </select>
+            </label>
+            <label class="flex items-center gap-2 mt-5">
+              <input name="has_lien" type="checkbox" class="w-4 h-4" /> Zástava
+            </label>
+            <label class="flex flex-col gap-1">Zástava - banka
+              <input name="lien_bank" class="input" />
+            </label>
+            <div class="col-span-full flex gap-2 mt-1">
+              <button type="submit" class="btn-primary">Uložit</button>
+              <button type="button" id="property-form-reset" class="btn-secondary">Zrušit úpravy</button>
+            </div>
+          </form>
+        </div>
+
+        <div class="bg-white rounded-xl border border-slate-200 p-4 overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="text-left text-slate-500 border-b border-slate-200">
+                <th class="py-2 pr-3">Nemovitost</th>
+                <th class="py-2 pr-3 text-right">Nájem</th>
+                <th class="py-2 pr-3 text-right">Splátka</th>
+                <th class="py-2 pr-3 text-right">Tržní hodnota</th>
+                <th class="py-2 pr-3 text-right">Pořizovací cena</th>
+                <th class="py-2 pr-3 text-right">Růst %</th>
+                <th class="py-2 pr-3 text-right">Po zhodnocení</th>
+                <th class="py-2 pr-3">Zástava</th>
+                <th class="py-2 pr-3">Časový test - zbývá</th>
+                <th class="py-2 pr-3"></th>
+              </tr>
+            </thead>
+            <tbody id="properties-tbody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ÚVĚRY / FIXACE -->
+      <section id="tab-loans" class="tab-panel hidden">
+        <div class="bg-white rounded-xl border border-slate-200 p-4 mb-6">
+          <h2 id="loan-form-title" class="font-semibold mb-3">Přidat úvěr</h2>
+          <form id="loan-form" class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+            <input type="hidden" name="id" />
+            <label class="flex flex-col gap-1">Banka
+              <input name="bank" required class="input" />
+            </label>
+            <label class="flex flex-col gap-1">Výše úvěru (Kč)
+              <input name="amount" type="number" step="1" class="input" />
+            </label>
+            <label class="flex flex-col gap-1">Úrok (%)
+              <input name="interest_rate" type="number" step="0.01" class="input" />
+            </label>
+            <label class="flex flex-col gap-1">Doba fixace (roky)
+              <input name="fixation_years" type="number" step="1" class="input" />
+            </label>
+            <label class="flex flex-col gap-1">Fixace od
+              <input name="start_date" type="date" class="input" />
+            </label>
+            <label class="flex flex-col gap-1 col-span-2">Poznámka (např. na které nemovitosti)
+              <input name="note" class="input" />
+            </label>
+            <div class="col-span-full flex gap-2 mt-1">
+              <button type="submit" class="btn-primary">Uložit</button>
+              <button type="button" id="loan-form-reset" class="btn-secondary">Zrušit úpravy</button>
+            </div>
+          </form>
+        </div>
+
+        <div class="bg-white rounded-xl border border-slate-200 p-4 overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="text-left text-slate-500 border-b border-slate-200">
+                <th class="py-2 pr-3">Banka</th>
+                <th class="py-2 pr-3 text-right">Výše úvěru</th>
+                <th class="py-2 pr-3 text-right">Úrok</th>
+                <th class="py-2 pr-3 text-right">Fixace</th>
+                <th class="py-2 pr-3">Od</th>
+                <th class="py-2 pr-3">Zbývá fixace</th>
+                <th class="py-2 pr-3">Poznámka</th>
+                <th class="py-2 pr-3"></th>
+              </tr>
+            </thead>
+            <tbody id="loans-tbody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- NASTAVENÍ -->
+      <section id="tab-settings" class="tab-panel hidden">
+        <div class="bg-white rounded-xl border border-slate-200 p-4 max-w-sm">
+          <h2 class="font-semibold mb-3">Nastavení</h2>
+          <form id="settings-form" class="space-y-3 text-sm">
+            <label class="flex flex-col gap-1">Předpokládaná inflace (% ročně)
+              <input id="inflation-input" type="number" step="0.1" class="input" />
+            </label>
+            <button type="submit" class="btn-primary">Uložit</button>
+          </form>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <script src="js/config.js"></script>
+  <script src="js/supabaseClient.js"></script>
+  <script src="js/calc.js"></script>
+  <script src="js/app.js"></script>
+  <script src="js/auth.js"></script>
+</body>
+</html>
