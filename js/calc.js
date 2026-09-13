@@ -401,14 +401,33 @@ function recommendActions(properties, loans, settings, today = new Date()) {
 }
 
 /**
+ * Splatí co nejvíc zbývajícího dluhu z dostupné hotovosti, vždy nejdřív ten
+ * úvěr s nejvyšší aktuální sazbou (a případný zbytek hotovosti přeteče do
+ * dalšího v pořadí). Mutuje loanState. Vrací hotovost, která po splacení
+ * všeho dostupného dluhu ještě zbyla (0, pokud dluh >= hotovost).
+ */
+function payDownDebtWithCash(loans, loanState, stateYear, cashAvailable) {
+  let cash = cashAvailable;
+  const targets = loans
+    .filter((l) => loanState[l.id].remainingPrincipal > 0.01)
+    .sort((a, b) => loanRateForYear(b, loanState[b.id].startYear, stateYear) - loanRateForYear(a, loanState[a.id].startYear, stateYear));
+  for (const l of targets) {
+    if (cash <= 0) break;
+    const ls = loanState[l.id];
+    const pay = Math.min(ls.remainingPrincipal, cash);
+    ls.remainingPrincipal -= pay;
+    cash -= pay;
+  }
+  return cash;
+}
+
+/**
  * Plán "osvobození" portfolia od dluhu: každý rok nemovitosti rostou a úvěry
- * se přirozeně umořují (stejně jako v projectPortfolio); pokud po tom zbývá
- * dluh, simulace každý rok zkontroluje, jestli prodej NEJLEPŠÍHO kandidáta
- * (stejné bodování jako v Doporučení - vysoké zhodnocení, ideálně po časovém
- * testu, slabý výnos) pokryje celý zbytek nejnevýhodnějšího úvěru (nejvyšší
- * sazba) - pokud ano, "prodá" ho, splatí ten úvěr a pokračuje. Když žádná
- * jedna nemovitost univěr nepokryje, prodá se aspoň ta nejlepší a sníží se
- * dluh o to, co její výnos pokryje (zbytek jde do hotovosti/vlastního kapitálu).
+ * se přirozeně umořují (stejně jako v projectPortfolio). Jakákoliv volná
+ * hotovost (z předchozích prodejů) se PRVNÍ vždy použije na doplacení dluhu -
+ * teprve když to nestačí, simulace prodá NEJLEPŠÍHO kandidáta (stejné
+ * bodování jako v kartě Doporučení: vysoké zhodnocení, ideálně po časovém
+ * testu, slabý výnos) a výtěžek z prodeje jde do stejné hotovostní rezervy.
  * Vrací { rows, events, debtFreeYear } - debtFreeYear je null, pokud se dluh
  * nepodaří do horizontu vynulovat.
  */
@@ -428,6 +447,7 @@ function simulateDebtFreedomPlan({ properties, loans, settings, horizonYears, st
   const rows = [];
   const saleEvents = [];
   let debtFreeYear = null;
+  let cash = 0;
 
   for (let k = 0; k <= horizonYears; k++) {
     const stateYear = startYear + k;
@@ -441,58 +461,43 @@ function simulateDebtFreedomPlan({ properties, loans, settings, horizonYears, st
       }
     }
 
+    cash = payDownDebtWithCash(loans, loanState, stateYear, cash);
     let totalDebt = loans.reduce((s, l) => s + loanState[l.id].remainingPrincipal, 0);
     const activeValue = propState.filter((ps) => !ps.sold).reduce((s, ps) => s + curValue[ps.property.id], 0);
 
-    if (totalDebt <= 0.01 && debtFreeYear === null) {
-      debtFreeYear = stateYear;
-      rows.push({ year: stateYear, totalDebt: 0, activeValue, soldThisYear: null });
-      break;
-    }
-
     let soldThisYear = null;
-    const remainingLoans = loans.filter((l) => loanState[l.id].remainingPrincipal > 0.01);
     const unsold = propState.filter((ps) => !ps.sold);
 
-    if (remainingLoans.length && unsold.length) {
-      const targetLoan = [...remainingLoans].sort(
-        (a, b) => loanRateForYear(b, loanState[b.id].startYear, stateYear) - loanRateForYear(a, loanState[a.id].startYear, stateYear)
-      )[0];
+    if (totalDebt > 0.01 && unsold.length) {
       const candidates = unsold
         .map((ps) => scoreSaleCandidate(ps.property, curValue[ps.property.id], capGainsTaxRate, new Date(stateYear, 0, 1)))
         .sort((a, b) => b.score - a.score);
-
-      const targetDebt = loanState[targetLoan.id].remainingPrincipal;
-      const fullyCovers = candidates.find((c) => c.netProceeds >= targetDebt);
+      const fullyCovers = candidates.find((c) => c.netProceeds >= totalDebt);
       const chosen = fullyCovers || candidates[0];
 
-      const payoff = Math.min(chosen.netProceeds, targetDebt);
-      loanState[targetLoan.id].remainingPrincipal -= payoff;
-      const leftoverCash = chosen.netProceeds - payoff;
+      cash += chosen.netProceeds;
       propState.find((ps) => ps.property.id === chosen.property.id).sold = true;
+      cash = payDownDebtWithCash(loans, loanState, stateYear, cash);
+      totalDebt = loans.reduce((s, l) => s + loanState[l.id].remainingPrincipal, 0);
 
       soldThisYear = {
         propertyName: chosen.property.name,
         saleProceeds: chosen.netProceeds,
         estimatedSaleTax: chosen.estimatedSaleTax,
         taxExempt: chosen.taxExempt,
-        loanBank: targetLoan.bank,
-        paidTowardLoan: payoff,
-        loanFullyCleared: loanState[targetLoan.id].remainingPrincipal <= 0.01,
-        leftoverCash,
+        loanFullyCleared: totalDebt <= 0.01,
+        cashAfter: cash,
       };
       saleEvents.push({ year: stateYear, ...soldThisYear });
-
-      totalDebt = loans.reduce((s, l) => s + loanState[l.id].remainingPrincipal, 0);
     }
 
-    rows.push({ year: stateYear, totalDebt, activeValue, soldThisYear });
+    rows.push({ year: stateYear, totalDebt, activeValue, cash, soldThisYear });
 
-    if (totalDebt <= 0.01 && debtFreeYear === null) {
+    if (totalDebt <= 0.01) {
       debtFreeYear = stateYear;
       break;
     }
-    if (totalDebt > 0.01 && propState.every((ps) => ps.sold)) {
+    if (propState.every((ps) => ps.sold)) {
       // dluh zbyl, ale už není co prodat - konec simulace (nemá smysl pokračovat)
       break;
     }
