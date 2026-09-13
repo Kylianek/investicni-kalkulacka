@@ -1,7 +1,9 @@
-/* Hlavní logika aplikace: načítání dat z Supabase, CRUD formuláře, přepočet a vykreslení přehledu. */
+/* Hlavní logika aplikace: data se ukládají jen lokálně v prohlížeči (localStorage),
+   žádný účet ani server. Výpočty jsou v js/calc.js. */
+
+const STORAGE_KEY = 'investicni-kalkulacka-v1';
 
 const state = {
-  userId: null,
   properties: [],
   loans: [],
   settings: { inflation_rate: 0.03 },
@@ -11,17 +13,47 @@ const fmtMoney = (n) =>
   (Number(n) || 0).toLocaleString('cs-CZ', { maximumFractionDigits: 0 }) + ' Kč';
 const fmtPercent = (n) => ((Number(n) || 0) * 100).toLocaleString('cs-CZ', { maximumFractionDigits: 2 }) + ' %';
 
-/* ---------- Inicializace po přihlášení ---------- */
-
-async function onAuthReady(user) {
-  state.userId = user.id;
-  wireTabs();
-  wireForms();
-  await refreshAll();
+function uid() {
+  return (crypto.randomUUID ? crypto.randomUUID() : 'id-' + Date.now() + '-' + Math.random().toString(16).slice(2));
 }
 
-async function refreshAll() {
-  await Promise.all([loadProperties(), loadLoans(), loadSettings()]);
+/* ---------- Perzistence (localStorage) ---------- */
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed.properties)) state.properties = parsed.properties;
+    if (Array.isArray(parsed.loans)) state.loans = parsed.loans;
+    if (parsed.settings && typeof parsed.settings.inflation_rate === 'number') {
+      state.settings = parsed.settings;
+    }
+  } catch (e) {
+    console.error('Nepodařilo se načíst uložená data:', e);
+  }
+}
+
+function saveState() {
+  const payload = {
+    properties: state.properties,
+    loans: state.loans,
+    settings: state.settings,
+  };
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+}
+
+/* ---------- Inicializace ---------- */
+
+function init() {
+  loadState();
+  wireTabs();
+  wireForms();
+  wireBackup();
+  renderAll();
+}
+
+function renderAll() {
   renderProperties();
   renderLoans();
   renderSettings();
@@ -42,18 +74,6 @@ function wireTabs() {
 }
 
 /* ---------- NEMOVITOSTI ---------- */
-
-async function loadProperties() {
-  const { data, error } = await supabaseClient
-    .from('properties')
-    .select('*')
-    .order('created_at', { ascending: true });
-  if (error) {
-    console.error(error);
-    return;
-  }
-  state.properties = data;
-}
 
 function renderProperties() {
   const tbody = document.getElementById('properties-tbody');
@@ -115,18 +135,19 @@ function resetPropertyForm() {
   document.getElementById('property-form-title').textContent = 'Přidat nemovitost';
 }
 
-async function deleteProperty(id) {
+function deleteProperty(id) {
   if (!confirm('Opravdu smazat tuto nemovitost?')) return;
-  const { error } = await supabaseClient.from('properties').delete().eq('id', id);
-  if (error) return alert('Chyba: ' + error.message);
-  await refreshAll();
+  state.properties = state.properties.filter((p) => p.id !== id);
+  saveState();
+  renderAll();
 }
 
-async function submitPropertyForm(e) {
+function submitPropertyForm(e) {
   e.preventDefault();
   const f = e.target;
+  const id = f.elements['id'].value;
   const payload = {
-    user_id: state.userId,
+    id: id || uid(),
     name: f.elements['name'].value.trim(),
     rent: Number(f.elements['rent'].value) || 0,
     payment: Number(f.elements['payment'].value) || 0,
@@ -138,28 +159,18 @@ async function submitPropertyForm(e) {
     has_lien: f.elements['has_lien'].checked,
     lien_bank: f.elements['lien_bank'].value.trim() || null,
   };
-  const id = f.elements['id'].value;
-  const { error } = id
-    ? await supabaseClient.from('properties').update(payload).eq('id', id)
-    : await supabaseClient.from('properties').insert(payload);
-  if (error) return alert('Chyba: ' + error.message);
+  if (id) {
+    const idx = state.properties.findIndex((p) => p.id === id);
+    if (idx !== -1) state.properties[idx] = payload;
+  } else {
+    state.properties.push(payload);
+  }
+  saveState();
   resetPropertyForm();
-  await refreshAll();
+  renderAll();
 }
 
 /* ---------- FIXACE / ÚVĚRY ---------- */
-
-async function loadLoans() {
-  const { data, error } = await supabaseClient
-    .from('loans')
-    .select('*')
-    .order('created_at', { ascending: true });
-  if (error) {
-    console.error(error);
-    return;
-  }
-  state.loans = data;
-}
 
 function renderLoans() {
   const tbody = document.getElementById('loans-tbody');
@@ -211,18 +222,19 @@ function resetLoanForm() {
   document.getElementById('loan-form-title').textContent = 'Přidat úvěr';
 }
 
-async function deleteLoan(id) {
+function deleteLoan(id) {
   if (!confirm('Opravdu smazat tento úvěr?')) return;
-  const { error } = await supabaseClient.from('loans').delete().eq('id', id);
-  if (error) return alert('Chyba: ' + error.message);
-  await refreshAll();
+  state.loans = state.loans.filter((l) => l.id !== id);
+  saveState();
+  renderAll();
 }
 
-async function submitLoanForm(e) {
+function submitLoanForm(e) {
   e.preventDefault();
   const f = e.target;
+  const id = f.elements['id'].value;
   const payload = {
-    user_id: state.userId,
+    id: id || uid(),
     bank: f.elements['bank'].value.trim(),
     amount: Number(f.elements['amount'].value) || 0,
     interest_rate: (Number(f.elements['interest_rate'].value) || 0) / 100,
@@ -230,43 +242,89 @@ async function submitLoanForm(e) {
     start_date: f.elements['start_date'].value || null,
     note: f.elements['note'].value.trim() || null,
   };
-  const id = f.elements['id'].value;
-  const { error } = id
-    ? await supabaseClient.from('loans').update(payload).eq('id', id)
-    : await supabaseClient.from('loans').insert(payload);
-  if (error) return alert('Chyba: ' + error.message);
+  if (id) {
+    const idx = state.loans.findIndex((l) => l.id === id);
+    if (idx !== -1) state.loans[idx] = payload;
+  } else {
+    state.loans.push(payload);
+  }
+  saveState();
   resetLoanForm();
-  await refreshAll();
+  renderAll();
 }
 
 /* ---------- NASTAVENÍ (inflace) ---------- */
-
-async function loadSettings() {
-  const { data, error } = await supabaseClient
-    .from('settings')
-    .select('*')
-    .eq('user_id', state.userId)
-    .maybeSingle();
-  if (error) {
-    console.error(error);
-    return;
-  }
-  if (data) state.settings = data;
-}
 
 function renderSettings() {
   document.getElementById('inflation-input').value = (state.settings.inflation_rate * 100).toFixed(2);
 }
 
-async function submitSettingsForm(e) {
+function submitSettingsForm(e) {
   e.preventDefault();
   const rate = (Number(document.getElementById('inflation-input').value) || 0) / 100;
-  const { error } = await supabaseClient
-    .from('settings')
-    .upsert({ user_id: state.userId, inflation_rate: rate }, { onConflict: 'user_id' });
-  if (error) return alert('Chyba: ' + error.message);
   state.settings.inflation_rate = rate;
+  saveState();
   renderDashboard();
+}
+
+/* ---------- Záloha (export / import / smazání) ---------- */
+
+function wireBackup() {
+  document.getElementById('btn-export').addEventListener('click', exportBackup);
+  document.getElementById('import-file').addEventListener('change', importBackup);
+  document.getElementById('btn-clear').addEventListener('click', clearAllData);
+}
+
+function exportBackup() {
+  const payload = {
+    properties: state.properties,
+    loans: state.loans,
+    settings: state.settings,
+    exported_at: new Date().toISOString(),
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `investicni-kalkulacka-zaloha-${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function importBackup(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const parsed = JSON.parse(reader.result);
+      if (!confirm('Nahrání zálohy přepíše aktuální data v tomto prohlížeči. Pokračovat?')) return;
+      state.properties = Array.isArray(parsed.properties) ? parsed.properties : [];
+      state.loans = Array.isArray(parsed.loans) ? parsed.loans : [];
+      state.settings = parsed.settings && typeof parsed.settings.inflation_rate === 'number'
+        ? parsed.settings
+        : { inflation_rate: 0.03 };
+      saveState();
+      renderAll();
+      alert('Záloha byla úspěšně nahrána.');
+    } catch (err) {
+      alert('Soubor se nepodařilo přečíst - není to platná záloha.');
+    } finally {
+      e.target.value = '';
+    }
+  };
+  reader.readAsText(file);
+}
+
+function clearAllData() {
+  if (!confirm('Opravdu smazat všechna data v tomto prohlížeči? Tuto akci nelze vrátit zpět.')) return;
+  state.properties = [];
+  state.loans = [];
+  state.settings = { inflation_rate: 0.03 };
+  saveState();
+  renderAll();
 }
 
 /* ---------- PŘEHLED (dashboard) ---------- */
@@ -307,3 +365,5 @@ function wireForms() {
   document.getElementById('loan-form-reset').addEventListener('click', resetLoanForm);
   document.getElementById('settings-form').addEventListener('submit', submitSettingsForm);
 }
+
+document.addEventListener('DOMContentLoaded', init);

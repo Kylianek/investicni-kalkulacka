@@ -5,57 +5,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Investiční kalkulačka nemovitostí</title>
 <script src="https://cdn.tailwindcss.com"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <link rel="stylesheet" href="css/style.css" />
 </head>
 <body class="bg-slate-50 text-slate-800 min-h-screen">
 
-  <div id="config-warning" class="hidden bg-amber-100 text-amber-900 text-sm text-center py-2 px-4 border-b border-amber-300">
-    ⚠️ Supabase zatím není nakonfigurován. Uprav soubor <code>js/config.js</code> podle návodu v <code>README.md</code>.
-  </div>
-
-  <!-- ===================== PŘIHLÁŠENÍ ===================== -->
-  <div id="auth-screen" class="hidden flex items-center justify-center px-4 py-16">
-    <div class="w-full max-w-sm bg-white rounded-2xl shadow-lg p-8 border border-slate-200">
-      <h1 class="text-xl font-bold mb-1 text-center">Investiční kalkulačka</h1>
-      <p class="text-sm text-slate-500 text-center mb-6">Přehled nemovitostí, úvěrů a zhodnocení</p>
-
-      <form id="auth-form" class="space-y-4">
-        <div>
-          <label class="block text-sm font-medium mb-1" for="auth-email">E-mail</label>
-          <input id="auth-email" type="email" required autocomplete="email"
-                 class="w-full rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
-        </div>
-        <div>
-          <label class="block text-sm font-medium mb-1" for="auth-password">Heslo</label>
-          <input id="auth-password" type="password" required autocomplete="current-password" minlength="6"
-                 class="w-full rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
-        </div>
-
-        <p id="auth-error" class="hidden text-sm text-red-600"></p>
-        <p id="auth-info" class="hidden text-sm text-emerald-600"></p>
-
-        <button id="btn-login" type="submit"
-                class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg py-2 transition">
-          Přihlásit se
-        </button>
-        <button id="btn-register" type="button"
-                class="w-full bg-white hover:bg-slate-100 text-slate-700 font-medium rounded-lg py-2 border border-slate-300 transition">
-          Vytvořit účet
-        </button>
-      </form>
-    </div>
-  </div>
-
-  <!-- ===================== APLIKACE ===================== -->
-  <div id="app-screen" class="hidden">
+  <div id="app-screen">
     <header class="bg-white border-b border-slate-200">
       <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
         <h1 class="font-bold text-lg">🏠 Investiční kalkulačka</h1>
-        <div class="flex items-center gap-3 text-sm">
-          <span id="user-email" class="text-slate-500"></span>
-          <button id="btn-logout" class="text-red-600 hover:underline">Odhlásit</button>
-        </div>
+        <span class="text-xs text-slate-400">Data se ukládají jen v tomto prohlížeči</span>
       </div>
       <nav class="max-w-6xl mx-auto px-4 flex gap-1 -mb-px">
         <button class="tab-btn tab-active" data-tab="tab-overview">Přehled</button>
@@ -228,7 +186,7 @@
 
       <!-- NASTAVENÍ -->
       <section id="tab-settings" class="tab-panel hidden">
-        <div class="bg-white rounded-xl border border-slate-200 p-4 max-w-sm">
+        <div class="bg-white rounded-xl border border-slate-200 p-4 max-w-sm mb-6">
           <h2 class="font-semibold mb-3">Nastavení</h2>
           <form id="settings-form" class="space-y-3 text-sm">
             <label class="flex flex-col gap-1">Předpokládaná inflace (% ročně)
@@ -237,15 +195,30 @@
             <button type="submit" class="btn-primary">Uložit</button>
           </form>
         </div>
+
+        <div class="bg-white rounded-xl border border-slate-200 p-4 max-w-sm">
+          <h2 class="font-semibold mb-1">Záloha dat</h2>
+          <p class="text-xs text-slate-500 mb-3">
+            Data jsou uložena jen v tomto prohlížeči. Pro zálohu nebo přenos na jiné
+            zařízení si je stáhni jako soubor a na druhé straně ho nahraj zpět.
+          </p>
+          <div class="flex flex-col gap-2 text-sm">
+            <button id="btn-export" type="button" class="btn-secondary">Stáhnout zálohu (JSON)</button>
+            <label class="btn-secondary text-center cursor-pointer">
+              Nahrát zálohu (JSON)
+              <input id="import-file" type="file" accept="application/json" class="hidden" />
+            </label>
+            <button id="btn-clear" type="button" class="text-red-600 hover:underline text-left mt-2">
+              Smazat všechna data v tomto prohlížeči
+            </button>
+          </div>
+        </div>
       </section>
 
     </main>
   </div>
 
-  <script src="js/config.js"></script>
-  <script src="js/supabaseClient.js"></script>
   <script src="js/calc.js"></script>
   <script src="js/app.js"></script>
-  <script src="js/auth.js"></script>
 </body>
 </html>

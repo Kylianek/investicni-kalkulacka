@@ -1,12 +1,14 @@
 # Investiční kalkulačka nemovitostí
 
 Webová verze osobní kalkulačky z `INVESTIČNÍ KALKULAČKA 1.xlsx` — přehled nemovitostí,
-úvěrů (fixací), časového testu / zástav a zhodnocení portfolia. Přístup jen po přihlášení,
-každý uživatel vidí pouze svoje vlastní údaje.
+úvěrů (fixací), časového testu / zástav a zhodnocení portfolia.
 
-Je to čistě statická stránka (HTML/CSS/JS, žádný build krok), takže jde hostovat zdarma
-na GitHub Pages. Přihlášení, databázi a zabezpečení dat řeší [Supabase](https://supabase.com)
-(zdarma).
+Žádné přihlašování, žádný účet, žádný server. Aplikace je čistě statická stránka
+(HTML/CSS/JS, žádný build krok) a všechna data se ukládají výhradně v `localStorage`
+tvého prohlížeče — nikam se neposílají, takže nejsou nikde veřejně vidět. Nevýhoda
+tohoto přístupu: data jsou dostupná jen v tom jednom prohlížeči/zařízení, kde je
+zadáš, a zmizí, pokud v něm vymažeš data stránek. Proto je v záložce **Nastavení**
+tlačítko na stažení/nahrání zálohy (JSON soubor).
 
 ## Jak vzorce odpovídají originálnímu Excelu
 
@@ -29,20 +31,8 @@ na GitHub Pages. Přihlášení, databázi a zabezpečení dat řeší [Supabase
 | PŘEHLED!D15 majetek po zhodnocení | `SUM(po zhodnocení)` | KPI "Majetek po zhodnocení" |
 | údaje!C7:C14 (růst % podle pozice v tabulce) | — | ve webu má **každá nemovitost svoje vlastní pole "Roční růst hodnoty %"**, aby to nezáviselo na pořadí řádků jako v Excelu |
 
-Všechny vzorce jsou v [js/calc.js](js/calc.js) jako čisté funkce.
-
-## Nastavení (nutné před prvním použitím)
-
-1. Založ si zdarma účet na [supabase.com](https://supabase.com) a klikni na **New project**.
-2. V projektu otevři **SQL Editor** → **New query**, vlož obsah souboru
-   [sql/schema.sql](sql/schema.sql) a spusť ho (vytvoří tabulky + zabezpečení).
-3. V **Settings → API** zkopíruj `Project URL` a `anon public` klíč.
-4. Otevři [js/config.js](js/config.js) a vlož obě hodnoty. Tento klíč je veřejný
-   ("anon") a je v pořádku ho mít i ve veřejném repozitáři — skutečná ochrana dat je
-   zajištěná přes Row Level Security z kroku 2 (každý uživatel vidí jen svoje řádky).
-5. (Volitelné) V **Authentication → Emails** si můžeš upravit e-mailové šablony
-   (potvrzení registrace) do češtiny.
-6. Commitni a pushni změnu v `js/config.js` — GitHub Pages se automaticky nasadí znovu.
+Všechny vzorce jsou v [js/calc.js](js/calc.js) jako čisté funkce (ověřené na skutečných
+číslech z originálního souboru — souhlasí do koruny).
 
 ## Lokální vyzkoušení
 
@@ -51,13 +41,15 @@ lokální server, např. `npx serve .`
 
 ## Nasazení (GitHub Pages)
 
-Repozitář je připravený na GitHub Pages ze složky `/ (root)` větve `main` — stránka
-běží na `https://<tvůj-github-účet>.github.io/investicni-kalkulacka/`.
+Repozitář je nasazený na GitHub Pages ze složky `/ (root)` větve `main`:
+**https://kylianek.github.io/investicni-kalkulacka/**
 
-## Bezpečnost dat
+## Soukromí dat
 
-- Registrace/přihlášení probíhá přes Supabase Auth (e-mail + heslo).
-- Všechny tabulky (`properties`, `loans`, `settings`) mají zapnuté Row Level Security —
-  databáze na úrovni SQL politik zaručuje, že uživatel může číst a měnit jen řádky,
-  kde `user_id` odpovídá jeho vlastnímu přihlášenému účtu.
-- Bez přihlášení nejsou žádná data vidět — aplikace zobrazí jen přihlašovací obrazovku.
+- Žádné přihlašování ani účet — aplikace se otevře rovnou.
+- Veškerá data (nemovitosti, úvěry, nastavení) se ukládají pouze lokálně v
+  `localStorage` tvého prohlížeče. Nic se neodesílá na žádný server, takže nejsou
+  nikde veřejně dostupná, ani ve zdrojovém kódu na GitHubu.
+- Zálohuj si data přes tlačítko "Stáhnout zálohu (JSON)" v Nastavení — zvlášť před
+  smazáním dat prohlížeče nebo při přechodu na jiné zařízení/prohlížeč (tam pak
+  zálohu nahraješ přes "Nahrát zálohu").
