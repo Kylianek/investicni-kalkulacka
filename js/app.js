@@ -773,8 +773,9 @@ function renderFreedom() {
     banner.innerHTML = '<p class="font-semibold text-emerald-800">Portfolio už teď nemá žádný dluh.</p>';
   } else if (plan.debtFreeYear !== null) {
     const yearsToFree = plan.debtFreeYear - CURRENT_YEAR;
+    const whenText = yearsToFree <= 0 ? 'hned letos' : `za ${yearsToFree} ${pluralYears(yearsToFree)}`;
     banner.className = 'rounded-xl border p-4 mb-6 bg-emerald-50 border-emerald-300';
-    banner.innerHTML = `<p class="font-semibold text-emerald-800">Celé portfolio bez dluhu od roku ${plan.debtFreeYear} (za ${yearsToFree} ${pluralYears(yearsToFree)}).</p>`;
+    banner.innerHTML = `<p class="font-semibold text-emerald-800">Celé portfolio bez dluhu od roku ${plan.debtFreeYear} (${whenText}).</p>`;
   } else {
     banner.className = 'rounded-xl border p-4 mb-6 bg-amber-50 border-amber-300';
     banner.innerHTML = `<p class="font-semibold text-amber-800">V horizontu ${horizon} let se nepodaří dluh celý splatit prodejem nemovitostí ve vlastnictví - zkus delší horizont, nebo přidej další nemovitosti.</p>`;
