@@ -65,3 +65,25 @@
 .btn-secondary:hover {
   background: #f1f5f9;
 }
+
+.period-toggle-btn {
+  padding: 0.4rem 0.9rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #64748b;
+  background: white;
+}
+.period-toggle-btn:not(:last-child) {
+  border-right: 1px solid #cbd5e1;
+}
+.period-toggle-btn.period-toggle-active {
+  background: #2563eb;
+  color: white;
+}
+
+.rent-positive {
+  color: #16a34a;
+}
+.payment-negative {
+  color: #dc2626;
+}

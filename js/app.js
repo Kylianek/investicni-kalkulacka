@@ -2,6 +2,35 @@
    žádný účet ani server. Výpočty jsou v js/calc.js. */
 
 const STORAGE_KEY = 'investicni-kalkulacka-v1';
+const CURRENT_YEAR = new Date().getFullYear();
+
+const LOCATIONS = [
+  { key: 'vrazkov', label: 'Vražkov', rate: 5 },
+  { key: 'kralupy', label: 'Kralupy nad Vltavou', rate: 7 },
+  { key: 'vodolka', label: 'Vodolka', rate: 8 },
+  { key: 'roudnice', label: 'Roudnice nad Labem', rate: 6 },
+  { key: 'kadan', label: 'Kadaň', rate: 5 },
+  { key: 'zloncice', label: 'Zlončice', rate: 5 },
+  { key: 'usti', label: 'Ústí nad Labem', rate: 9 },
+  { key: 'olomouc', label: 'Olomouc', rate: 5.5 },
+  { key: 'praha', label: 'Praha', rate: 6 },
+  { key: 'brno', label: 'Brno', rate: 6 },
+  { key: 'ostrava', label: 'Ostrava', rate: 4 },
+  { key: 'plzen', label: 'Plzeň', rate: 5 },
+];
+
+const CZ_BANKS = [
+  'Česká spořitelna',
+  'ČSOB',
+  'Komerční banka',
+  'UniCredit Bank',
+  'Raiffeisenbank',
+  'Moneta Money Bank',
+  'mBank',
+  'Fio banka',
+  'Air Bank',
+  'Hypoteční banka',
+];
 
 const state = {
   properties: [],
@@ -9,6 +38,7 @@ const state = {
   events: [],
   settings: { inflation_rate: 0.03, rental_tax_rate: 15, capital_gains_tax_rate: 15 },
   scenario: { horizonYears: 20 },
+  overview: { year: CURRENT_YEAR, period: 'year' },
 };
 
 const fmtMoney = (n) =>
@@ -31,6 +61,7 @@ function loadState() {
     if (Array.isArray(parsed.events)) state.events = parsed.events;
     if (parsed.settings) Object.assign(state.settings, parsed.settings);
     if (parsed.scenario) Object.assign(state.scenario, parsed.scenario);
+    if (parsed.overview) Object.assign(state.overview, parsed.overview);
   } catch (e) {
     console.error('Nepodařilo se načíst uložená data:', e);
   }
@@ -43,6 +74,7 @@ function saveState() {
     events: state.events,
     settings: state.settings,
     scenario: state.scenario,
+    overview: state.overview,
   };
   localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
 }
@@ -54,11 +86,18 @@ function init() {
   wireTabs();
   wireForms();
   wireBackup();
-  document.getElementById('event-type').addEventListener('change', updateEventTargetOptions);
+  wireLienToggle();
+  wireOverviewControls();
+  populateLocationOptions();
+  populateBankList();
+  syncLienFieldsVisibility();
+  resetEventForm();
+  document.getElementById('event-type').addEventListener('change', updateEventValueLabel);
   document.getElementById('scenario-horizon').addEventListener('input', (e) => {
     state.scenario.horizonYears = Math.max(1, Number(e.target.value) || 1);
     saveState();
     renderScenario();
+    renderOverview();
   });
   renderAll();
 }
@@ -67,9 +106,9 @@ function renderAll() {
   renderProperties();
   renderLoans();
   renderSettings();
-  renderDashboard();
   renderEvents();
   renderScenario();
+  renderOverview();
 }
 
 /* ---------- Tabs ---------- */
@@ -85,42 +124,69 @@ function wireTabs() {
   });
 }
 
-/* ---------- NEMOVITOSTI ---------- */
+/* ---------- Lokality a banky (číselníky) ---------- */
 
-function populateLoanOptions() {
-  document.querySelectorAll('.property-loan-select').forEach((sel) => {
-    const current = sel.value;
-    sel.innerHTML = '<option value="">Bez úvěru / vlastní kapitál</option>';
-    for (const l of state.loans) {
-      const opt = document.createElement('option');
-      opt.value = l.id;
-      opt.textContent = `${l.bank} (${fmtMoney(l.amount)})`;
-      sel.appendChild(opt);
+function populateLocationOptions() {
+  const sel = document.getElementById('property-location');
+  for (const loc of LOCATIONS) {
+    const opt = document.createElement('option');
+    opt.value = loc.key;
+    opt.textContent = `${loc.label} (${loc.rate} %)`;
+    sel.appendChild(opt);
+  }
+  sel.addEventListener('change', () => {
+    const loc = LOCATIONS.find((l) => l.key === sel.value);
+    if (loc) {
+      document.getElementById('property-form').elements['growth_rate'].value = loc.rate;
     }
-    sel.value = current;
   });
 }
 
+function populateBankList() {
+  const dl = document.getElementById('bank-list');
+  for (const bank of CZ_BANKS) {
+    const opt = document.createElement('option');
+    opt.value = bank;
+    dl.appendChild(opt);
+  }
+}
+
+/* ---------- Zástava - podmíněné zobrazení polí ---------- */
+
+function wireLienToggle() {
+  document.getElementById('property-has-lien').addEventListener('change', syncLienFieldsVisibility);
+}
+
+function syncLienFieldsVisibility() {
+  const checked = document.getElementById('property-has-lien').checked;
+  document.getElementById('property-lien-fields').className = checked ? 'contents' : 'hidden';
+}
+
+/* ---------- NEMOVITOSTI ---------- */
+
 function renderProperties() {
-  populateLoanOptions();
   const tbody = document.getElementById('properties-tbody');
   tbody.innerHTML = '';
   for (const p of state.properties) {
     const av = calc.appreciatedValue(Number(p.market_value), Number(p.growth_rate));
+    const released = (Number(p.market_value) || 0) - (Number(p.acquisition_price) || 0);
     const tt = p.acquisition_date
       ? calc.timeTestRemaining(new Date(p.acquisition_date), p.tax_exempt_years || 10)
       : null;
+    const lienText = p.has_lien
+      ? `ANO — ${escapeHtml(p.lien_bank || '?')} (${fmtMoney(p.lien_value)})`
+      : 'NE';
     const tr = document.createElement('tr');
     tr.className = 'border-b border-slate-200 dark:border-slate-700';
     tr.innerHTML = `
       <td class="py-2 pr-3 font-medium">${escapeHtml(p.name)}</td>
-      <td class="py-2 pr-3 text-right">${fmtMoney(p.rent)}</td>
-      <td class="py-2 pr-3 text-right">${fmtMoney(p.payment)}</td>
+      <td class="py-2 pr-3 text-right rent-positive">+${fmtMoney(p.rent)}</td>
+      <td class="py-2 pr-3 text-right payment-negative">-${fmtMoney(p.payment)}</td>
       <td class="py-2 pr-3 text-right">${fmtMoney(p.market_value)}</td>
-      <td class="py-2 pr-3 text-right">${fmtMoney(p.acquisition_price)}</td>
+      <td class="py-2 pr-3 text-right ${released >= 0 ? 'rent-positive' : 'payment-negative'}">${fmtMoney(released)}</td>
       <td class="py-2 pr-3 text-right">${fmtPercent(p.growth_rate)}</td>
       <td class="py-2 pr-3 text-right">${fmtMoney(av)}</td>
-      <td class="py-2 pr-3">${p.has_lien ? `ANO (${escapeHtml(p.lien_bank || '')})` : 'NE'}</td>
+      <td class="py-2 pr-3">${lienText}</td>
       <td class="py-2 pr-3">${tt ? tt.text : '—'}</td>
       <td class="py-2 pr-3 whitespace-nowrap">
         <button class="text-blue-600 hover:underline mr-2" data-edit-property="${p.id}">Upravit</button>
@@ -146,17 +212,21 @@ function fillPropertyForm(id) {
   f.elements['payment'].value = p.payment;
   f.elements['market_value'].value = p.market_value;
   f.elements['acquisition_price'].value = p.acquisition_price;
+  f.elements['location'].value = p.location || '';
   f.elements['growth_rate'].value = p.growth_rate * 100;
   f.elements['acquisition_date'].value = p.acquisition_date || '';
   f.elements['tax_exempt_years'].value = p.tax_exempt_years || 10;
+  f.elements['equity_invested'].value = p.equity_invested || '';
+  f.elements['debt_invested'].value = p.debt_invested || '';
   f.elements['has_lien'].checked = !!p.has_lien;
   f.elements['lien_bank'].value = p.lien_bank || '';
+  f.elements['lien_value'].value = p.lien_value || '';
   f.elements['vacancy_rate'].value = (p.vacancy_rate || 0) * 100;
   f.elements['monthly_costs'].value = p.monthly_costs || 0;
   f.elements['rent_growth_rate'].value = (p.rent_growth_rate || 0) * 100;
-  f.elements['linked_loan_id'].value = p.linked_loan_id || '';
   f.elements['planned_sale_year'].value = p.planned_sale_year || '';
   f.elements['planned_sale_price'].value = p.planned_sale_price || '';
+  syncLienFieldsVisibility();
   document.getElementById('property-form-title').textContent = 'Upravit nemovitost';
 }
 
@@ -165,6 +235,7 @@ function resetPropertyForm() {
   f.reset();
   f.elements['id'].value = '';
   f.elements['tax_exempt_years'].value = '10';
+  syncLienFieldsVisibility();
   document.getElementById('property-form-title').textContent = 'Přidat nemovitost';
 }
 
@@ -186,15 +257,18 @@ function submitPropertyForm(e) {
     payment: Number(f.elements['payment'].value) || 0,
     market_value: Number(f.elements['market_value'].value) || 0,
     acquisition_price: Number(f.elements['acquisition_price'].value) || 0,
+    location: f.elements['location'].value || null,
     growth_rate: (Number(f.elements['growth_rate'].value) || 0) / 100,
     acquisition_date: f.elements['acquisition_date'].value || null,
     tax_exempt_years: Number(f.elements['tax_exempt_years'].value) || 10,
+    equity_invested: f.elements['equity_invested'].value ? Number(f.elements['equity_invested'].value) : null,
+    debt_invested: f.elements['debt_invested'].value ? Number(f.elements['debt_invested'].value) : null,
     has_lien: f.elements['has_lien'].checked,
-    lien_bank: f.elements['lien_bank'].value.trim() || null,
+    lien_bank: f.elements['has_lien'].checked ? f.elements['lien_bank'].value.trim() || null : null,
+    lien_value: f.elements['has_lien'].checked && f.elements['lien_value'].value ? Number(f.elements['lien_value'].value) : null,
     vacancy_rate: (Number(f.elements['vacancy_rate'].value) || 0) / 100,
     monthly_costs: Number(f.elements['monthly_costs'].value) || 0,
     rent_growth_rate: (Number(f.elements['rent_growth_rate'].value) || 0) / 100,
-    linked_loan_id: f.elements['linked_loan_id'].value || null,
     planned_sale_year: f.elements['planned_sale_year'].value ? Number(f.elements['planned_sale_year'].value) : null,
     planned_sale_price: f.elements['planned_sale_price'].value ? Number(f.elements['planned_sale_price'].value) : null,
   };
@@ -265,11 +339,8 @@ function resetLoanForm() {
 }
 
 function deleteLoan(id) {
-  if (!confirm('Opravdu smazat tento úvěr? (Nemovitosti na něj navázané o vazbu přijdou.)')) return;
+  if (!confirm('Opravdu smazat tento úvěr?')) return;
   state.loans = state.loans.filter((l) => l.id !== id);
-  for (const p of state.properties) {
-    if (p.linked_loan_id === id) p.linked_loan_id = null;
-  }
   saveState();
   renderAll();
 }
@@ -316,76 +387,35 @@ function submitSettingsForm(e) {
   state.settings.rental_tax_rate = Number(document.getElementById('rental-tax-input').value) || 0;
   state.settings.capital_gains_tax_rate = Number(document.getElementById('capgains-tax-input').value) || 0;
   saveState();
-  renderDashboard();
   renderScenario();
+  renderOverview();
 }
 
-/* ---------- SCÉNÁŘOVÉ UDÁLOSTI ---------- */
+/* ---------- SCÉNÁŘOVÉ UDÁLOSTI (celoportfoliové) ---------- */
 
 const EVENT_LABELS = {
-  growth: 'Růst hodnoty nemovitosti',
+  growth: 'Růst hodnoty nemovitostí',
   rent_growth: 'Růst nájmu',
   vacancy: 'Neobsazenost',
-  interest_rate: 'Úroková sazba úvěru',
   inflation: 'Inflace',
   one_time: 'Jednorázový příjem/výdaj',
 };
 
-function eventTargetKind(type) {
-  if (type === 'interest_rate') return 'loan';
-  if (type === 'growth' || type === 'rent_growth' || type === 'vacancy') return 'property_or_portfolio';
-  return 'portfolio'; // inflation, one_time
-}
-
-function updateEventTargetOptions() {
+function updateEventValueLabel() {
   const type = document.getElementById('event-type').value;
-  const kind = eventTargetKind(type);
-  const sel = document.getElementById('event-target');
-  const wrap = document.getElementById('event-target-wrap');
-  const valueLabel = document.getElementById('event-value-label');
-  sel.innerHTML = '';
-
-  if (kind === 'loan') {
-    for (const l of state.loans) {
-      const opt = document.createElement('option');
-      opt.value = `loan:${l.id}`;
-      opt.textContent = l.bank;
-      sel.appendChild(opt);
-    }
-    wrap.classList.remove('hidden');
-  } else if (kind === 'property_or_portfolio') {
-    const optAll = document.createElement('option');
-    optAll.value = 'portfolio:';
-    optAll.textContent = 'Celé portfolio';
-    sel.appendChild(optAll);
-    for (const p of state.properties) {
-      const opt = document.createElement('option');
-      opt.value = `property:${p.id}`;
-      opt.textContent = p.name;
-      sel.appendChild(opt);
-    }
-    wrap.classList.remove('hidden');
-  } else {
-    wrap.classList.add('hidden');
-    sel.innerHTML = '<option value="portfolio:">Celé portfolio</option>';
-  }
-
-  valueLabel.textContent = type === 'one_time' ? 'Hodnota (Kč)' : 'Hodnota (%)';
+  document.getElementById('event-value-label').textContent = type === 'one_time' ? 'Hodnota (Kč)' : 'Hodnota (%)';
 }
 
 function renderEvents() {
-  updateEventTargetOptions();
   const tbody = document.getElementById('events-tbody');
   tbody.innerHTML = '';
   for (const ev of state.events) {
-    const targetLabel = targetDisplayName(ev.target_type, ev.target_id);
     const period = ev.year_to && ev.year_to !== ev.year_from ? `${ev.year_from}–${ev.year_to}` : `${ev.year_from}`;
     const valueLabel = ev.type === 'one_time' ? fmtMoney(ev.value) : `${ev.value} %`;
     const tr = document.createElement('tr');
     tr.className = 'border-b border-slate-200';
     tr.innerHTML = `
       <td class="py-2 pr-3">${EVENT_LABELS[ev.type] || ev.type}</td>
-      <td class="py-2 pr-3">${escapeHtml(targetLabel)}</td>
       <td class="py-2 pr-3">${period}</td>
       <td class="py-2 pr-3 text-right">${valueLabel}</td>
       <td class="py-2 pr-3">${escapeHtml(ev.note || '')}</td>
@@ -403,31 +433,17 @@ function renderEvents() {
   );
 }
 
-function targetDisplayName(targetType, targetId) {
-  if (targetType === 'portfolio') return 'Celé portfolio';
-  if (targetType === 'property') {
-    const p = state.properties.find((x) => x.id === targetId);
-    return p ? p.name : '(smazaná nemovitost)';
-  }
-  if (targetType === 'loan') {
-    const l = state.loans.find((x) => x.id === targetId);
-    return l ? l.bank : '(smazaný úvěr)';
-  }
-  return '—';
-}
-
 function fillEventForm(id) {
   const ev = state.events.find((x) => x.id === id);
   if (!ev) return;
   const f = document.getElementById('event-form');
   f.elements['id'].value = ev.id;
   f.elements['type'].value = ev.type;
-  updateEventTargetOptions();
-  f.elements['target'].value = `${ev.target_type}:${ev.target_id || ''}`;
   f.elements['year_from'].value = ev.year_from;
   f.elements['year_to'].value = ev.year_to && ev.year_to !== ev.year_from ? ev.year_to : '';
   f.elements['value'].value = ev.value;
   f.elements['note'].value = ev.note || '';
+  updateEventValueLabel();
   document.getElementById('event-form-title').textContent = 'Upravit scénářovou událost';
 }
 
@@ -435,7 +451,8 @@ function resetEventForm() {
   const f = document.getElementById('event-form');
   f.reset();
   f.elements['id'].value = '';
-  updateEventTargetOptions();
+  f.elements['year_from'].value = CURRENT_YEAR;
+  updateEventValueLabel();
   document.getElementById('event-form-title').textContent = 'Přidat scénářovou událost';
 }
 
@@ -445,20 +462,18 @@ function deleteEvent(id) {
   saveState();
   renderEvents();
   renderScenario();
+  renderOverview();
 }
 
 function submitEventForm(e) {
   e.preventDefault();
   const f = e.target;
   const id = f.elements['id'].value;
-  const [targetType, targetId] = f.elements['target'].value.split(':');
   const yearFrom = Number(f.elements['year_from'].value);
   const yearToRaw = f.elements['year_to'].value;
   const payload = {
     id: id || uid(),
     type: f.elements['type'].value,
-    target_type: targetType,
-    target_id: targetId || null,
     year_from: yearFrom,
     year_to: yearToRaw ? Number(yearToRaw) : yearFrom,
     value: Number(f.elements['value'].value) || 0,
@@ -474,19 +489,24 @@ function submitEventForm(e) {
   resetEventForm();
   renderEvents();
   renderScenario();
+  renderOverview();
 }
 
 /* ---------- SCÉNÁŘE (predikce) ---------- */
 
 function renderScenario() {
-  document.getElementById('scenario-horizon').value = state.scenario.horizonYears;
+  const horizon = state.scenario.horizonYears;
+  document.getElementById('scenario-horizon').value = horizon;
+  document.getElementById('sc-kpi-end-equity-label').textContent = `Vlastní kapitál za ${horizon} let`;
+  document.getElementById('sc-kpi-cashflow-label').textContent = `Kumulovaný cashflow za ${horizon} let`;
 
   const result = calc.projectPortfolio({
     properties: state.properties,
     loans: state.loans,
     settings: state.settings,
     events: state.events,
-    horizonYears: state.scenario.horizonYears,
+    horizonYears: horizon,
+    startYear: CURRENT_YEAR,
   });
 
   const { rows, summary } = result;
@@ -571,6 +591,106 @@ function buildLineChartSVG(seriesList, { width = 900, height = 280, padding = 46
   </svg>`;
 }
 
+/* ---------- PŘEHLED (konkrétní rok / měsíc + doporučení) ---------- */
+
+function wireOverviewControls() {
+  const yearInput = document.getElementById('overview-year');
+  yearInput.value = state.overview.year;
+  yearInput.addEventListener('input', () => {
+    state.overview.year = Number(yearInput.value) || CURRENT_YEAR;
+    saveState();
+    renderOverview();
+  });
+  document.getElementById('overview-year-reset').addEventListener('click', () => {
+    state.overview.year = CURRENT_YEAR;
+    yearInput.value = CURRENT_YEAR;
+    saveState();
+    renderOverview();
+  });
+  document.getElementById('overview-period-year').addEventListener('click', () => setOverviewPeriod('year'));
+  document.getElementById('overview-period-month').addEventListener('click', () => setOverviewPeriod('month'));
+  setOverviewPeriod(state.overview.period, true);
+}
+
+function setOverviewPeriod(period, skipRender) {
+  state.overview.period = period;
+  document.getElementById('overview-period-year').classList.toggle('period-toggle-active', period === 'year');
+  document.getElementById('overview-period-month').classList.toggle('period-toggle-active', period === 'month');
+  saveState();
+  if (!skipRender) renderOverview();
+}
+
+function renderOverview() {
+  const selectedYear = state.overview.year || CURRENT_YEAR;
+  document.getElementById('overview-year').value = selectedYear;
+
+  const yearsAhead = Math.max(selectedYear - CURRENT_YEAR, 0);
+  const horizon = Math.max(state.scenario.horizonYears, yearsAhead + 1);
+  const result = calc.projectPortfolio({
+    properties: state.properties,
+    loans: state.loans,
+    settings: state.settings,
+    events: state.events,
+    horizonYears: horizon,
+    startYear: CURRENT_YEAR,
+  });
+  const idx = Math.min(yearsAhead, result.rows.length - 1);
+  const row = result.rows[idx];
+  const nextRow = result.rows[idx + 1] || row;
+
+  const isMonth = state.overview.period === 'month';
+  const div = isMonth ? 12 : 1;
+
+  document.getElementById('kpi-assets').textContent = fmtMoney(row.totalValue);
+  document.getElementById('kpi-debt').textContent = fmtMoney(row.totalDebt);
+  document.getElementById('kpi-networth').textContent = fmtMoney(row.equity);
+  document.getElementById('kpi-debtratio').textContent = row.totalValue > 0 ? fmtPercent(row.totalDebt / row.totalValue) : '0 %';
+  document.getElementById('kpi-cashflow').textContent = fmtMoney(row.cashflow / div);
+  document.getElementById('kpi-appreciation').textContent = fmtMoney(row.appreciationGain / div);
+  document.getElementById('kpi-inflation-loss').textContent = fmtMoney(row.inflationLoss / div);
+  document.getElementById('kpi-real-appreciation').textContent = fmtMoney(row.realAppreciation / div);
+  document.getElementById('kpi-projected-value').textContent = fmtMoney(nextRow.totalValue);
+
+  document.getElementById('kpi-cashflow-label').textContent = isMonth ? 'Měsíční cashflow' : 'Roční cashflow';
+  document.getElementById('kpi-appreciation-label').textContent = isMonth ? 'Měsíční zhodnocení' : 'Roční zhodnocení';
+  document.getElementById('kpi-inflation-loss-label').textContent = isMonth ? 'Ztráta inflací (měsíc)' : 'Ztráta inflací (rok)';
+  document.getElementById('kpi-real-appreciation-label').textContent = isMonth ? 'Zbývá po inflaci (měsíc)' : 'Zbývá po inflaci (rok)';
+
+  const cashflowEl = document.getElementById('kpi-cashflow');
+  cashflowEl.classList.toggle('text-red-600', row.cashflow < 0);
+  cashflowEl.classList.toggle('text-emerald-600', row.cashflow >= 0);
+  const realAppEl = document.getElementById('kpi-real-appreciation');
+  realAppEl.classList.toggle('text-red-600', row.realAppreciation < 0);
+  realAppEl.classList.toggle('text-emerald-600', row.realAppreciation >= 0);
+
+  renderRecommendation();
+}
+
+function renderRecommendation() {
+  const rec = calc.recommendActions(state.properties, state.loans, new Date());
+  const el = document.getElementById('recommendation-content');
+  if (!rec) {
+    el.innerHTML = '<p>Zatím nemáš dost dat (přidej nemovitosti a úvěry) pro doporučení.</p>';
+    return;
+  }
+  let html = '';
+  if (rec.bestProperty) {
+    const bp = rec.bestProperty;
+    html += `<div>
+      <p class="font-medium text-slate-800">Nejvhodnější k prodeji: ${escapeHtml(bp.property.name)}</p>
+      <p class="text-xs text-slate-500">Zhodnocení ${fmtPercent(bp.gainPct)} (${fmtMoney(bp.gain)}), časový test ${bp.taxExempt ? 'už splněn' : 'zbývá ' + bp.timeTestText}, provozní výnos ${fmtPercent(bp.yieldPct)} ročně z tržní hodnoty.</p>
+    </div>`;
+  }
+  if (rec.worstLoan) {
+    const wl = rec.worstLoan;
+    html += `<div>
+      <p class="font-medium text-slate-800">Nejnevýhodnější úvěr ke splacení: ${escapeHtml(wl.loan.bank)}</p>
+      <p class="text-xs text-slate-500">Úrok ${fmtPercent(wl.rate)} - nejvyšší ze všech úvěrů, zbývající jistina ${fmtMoney(wl.loan.amount)}.</p>
+    </div>`;
+  }
+  el.innerHTML = html || '<p>Zatím nemáš dost dat pro doporučení.</p>';
+}
+
 /* ---------- Záloha (export / import / smazání) ---------- */
 
 function wireBackup() {
@@ -586,6 +706,7 @@ function exportBackup() {
     events: state.events,
     settings: state.settings,
     scenario: state.scenario,
+    overview: state.overview,
     exported_at: new Date().toISOString(),
   };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
@@ -616,6 +737,9 @@ function importBackup(e) {
       state.scenario = parsed.scenario && typeof parsed.scenario.horizonYears === 'number'
         ? parsed.scenario
         : { horizonYears: 20 };
+      state.overview = parsed.overview && typeof parsed.overview.year === 'number'
+        ? parsed.overview
+        : { year: CURRENT_YEAR, period: 'year' };
       saveState();
       renderAll();
       alert('Záloha byla úspěšně nahrána.');
@@ -635,31 +759,9 @@ function clearAllData() {
   state.events = [];
   state.settings = { inflation_rate: 0.03, rental_tax_rate: 15, capital_gains_tax_rate: 15 };
   state.scenario = { horizonYears: 20 };
+  state.overview = { year: CURRENT_YEAR, period: 'year' };
   saveState();
   renderAll();
-}
-
-/* ---------- PŘEHLED (dashboard) ---------- */
-
-function renderDashboard() {
-  const o = calc.overview(state.properties, state.loans, state.settings.inflation_rate);
-  document.getElementById('kpi-assets').textContent = fmtMoney(o.assets);
-  document.getElementById('kpi-debt').textContent = fmtMoney(o.debt);
-  document.getElementById('kpi-networth').textContent = fmtMoney(o.netWorth);
-  document.getElementById('kpi-debtratio').textContent = fmtPercent(o.debtRatio);
-  document.getElementById('kpi-cashflow').textContent = fmtMoney(o.cashflow);
-  document.getElementById('kpi-appreciation').textContent = fmtMoney(o.annualAppreciationGain);
-  document.getElementById('kpi-inflation-loss').textContent = fmtMoney(o.inflationLoss);
-  document.getElementById('kpi-real-appreciation').textContent = fmtMoney(o.realAppreciation);
-  document.getElementById('kpi-projected-value').textContent = fmtMoney(o.projectedPortfolioValue);
-
-  const cashflowEl = document.getElementById('kpi-cashflow');
-  cashflowEl.classList.toggle('text-red-600', o.cashflow < 0);
-  cashflowEl.classList.toggle('text-emerald-600', o.cashflow >= 0);
-
-  const realAppEl = document.getElementById('kpi-real-appreciation');
-  realAppEl.classList.toggle('text-red-600', o.realAppreciation < 0);
-  realAppEl.classList.toggle('text-emerald-600', o.realAppreciation >= 0);
 }
 
 /* ---------- Pomocné ---------- */

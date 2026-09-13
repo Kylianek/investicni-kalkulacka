@@ -28,7 +28,21 @@
 
       <!-- PŘEHLED -->
       <section id="tab-overview" class="tab-panel">
-        <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
+        <div class="bg-white rounded-xl border border-slate-200 p-4 mb-6 flex flex-wrap items-end gap-4">
+          <label class="flex flex-col gap-1 text-sm">Rok
+            <input id="overview-year" type="number" step="1" min="2000" max="2100" class="input w-28" />
+          </label>
+          <div class="flex flex-col gap-1 text-sm">
+            <span>Zobrazení</span>
+            <div class="flex rounded-lg border border-slate-300 overflow-hidden">
+              <button type="button" id="overview-period-year" class="period-toggle-btn period-toggle-active">Rok</button>
+              <button type="button" id="overview-period-month" class="period-toggle-btn">Měsíc</button>
+            </div>
+          </div>
+          <button type="button" id="overview-year-reset" class="btn-secondary">Dnešek</button>
+        </div>
+
+        <div class="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
           <div class="kpi-card">
             <div class="kpi-label">Majetek (tržní hodnota)</div>
             <div id="kpi-assets" class="kpi-value">—</div>
@@ -38,7 +52,7 @@
             <div id="kpi-debt" class="kpi-value">—</div>
           </div>
           <div class="kpi-card">
-            <div class="kpi-label">Vlastní majetek</div>
+            <div class="kpi-label">Vlastní kapitál</div>
             <div id="kpi-networth" class="kpi-value">—</div>
           </div>
           <div class="kpi-card">
@@ -46,25 +60,30 @@
             <div id="kpi-debtratio" class="kpi-value">—</div>
           </div>
           <div class="kpi-card">
-            <div class="kpi-label">Cashflow (nájem − splátky)</div>
+            <div class="kpi-label"><span id="kpi-cashflow-label">Roční cashflow</span></div>
             <div id="kpi-cashflow" class="kpi-value">—</div>
           </div>
           <div class="kpi-card">
-            <div class="kpi-label">Roční zhodnocení</div>
+            <div class="kpi-label"><span id="kpi-appreciation-label">Roční zhodnocení</span></div>
             <div id="kpi-appreciation" class="kpi-value">—</div>
           </div>
           <div class="kpi-card">
-            <div class="kpi-label">Ztráta inflací</div>
+            <div class="kpi-label"><span id="kpi-inflation-loss-label">Ztráta inflací (rok)</span></div>
             <div id="kpi-inflation-loss" class="kpi-value">—</div>
           </div>
           <div class="kpi-card">
-            <div class="kpi-label">Zbývá po inflaci</div>
+            <div class="kpi-label"><span id="kpi-real-appreciation-label">Zbývá po inflaci (rok)</span></div>
             <div id="kpi-real-appreciation" class="kpi-value">—</div>
           </div>
           <div class="kpi-card">
-            <div class="kpi-label">Majetek po zhodnocení</div>
+            <div class="kpi-label">Odhad majetku za 1 rok</div>
             <div id="kpi-projected-value" class="kpi-value">—</div>
           </div>
+        </div>
+
+        <div class="bg-white rounded-xl border border-slate-200 p-4">
+          <h2 class="font-semibold mb-3">Doporučení</h2>
+          <div id="recommendation-content" class="space-y-3 text-sm text-slate-600">—</div>
         </div>
       </section>
 
@@ -78,16 +97,21 @@
               <input name="name" required class="input" />
             </label>
             <label class="flex flex-col gap-1">Nájem (Kč/měs)
-              <input name="rent" type="number" step="1" class="input" />
+              <input name="rent" type="number" step="100" min="0" class="input" />
             </label>
             <label class="flex flex-col gap-1">Splátka (Kč/měs)
-              <input name="payment" type="number" step="1" class="input" />
+              <input name="payment" type="number" step="100" min="0" class="input" />
             </label>
             <label class="flex flex-col gap-1">Tržní hodnota (Kč)
-              <input name="market_value" type="number" step="1" class="input" />
+              <input name="market_value" type="number" step="10000" min="0" class="input" />
             </label>
             <label class="flex flex-col gap-1">Pořizovací cena (Kč)
-              <input name="acquisition_price" type="number" step="1" class="input" />
+              <input name="acquisition_price" type="number" step="10000" min="0" class="input" />
+            </label>
+            <label class="flex flex-col gap-1">Lokalita
+              <select name="location" id="property-location" class="input">
+                <option value="">Jiná / vlastní sazba</option>
+              </select>
             </label>
             <label class="flex flex-col gap-1">Roční růst hodnoty (%)
               <input name="growth_rate" type="number" step="0.1" class="input" />
@@ -101,35 +125,42 @@
                 <option value="10" selected>10</option>
               </select>
             </label>
+            <label class="flex flex-col gap-1">Vlastní zdroje vložené (Kč)
+              <input name="equity_invested" type="number" step="10000" min="0" class="input" />
+            </label>
+            <label class="flex flex-col gap-1">Cizí kapitál (úvěr) vložený (Kč)
+              <input name="debt_invested" type="number" step="10000" min="0" class="input" />
+            </label>
+
             <label class="flex items-center gap-2 mt-5">
-              <input name="has_lien" type="checkbox" class="w-4 h-4" /> Zástava
+              <input name="has_lien" id="property-has-lien" type="checkbox" class="w-4 h-4" /> Zástava
             </label>
-            <label class="flex flex-col gap-1">Zástava - banka
-              <input name="lien_bank" class="input" />
-            </label>
+            <div id="property-lien-fields" class="hidden">
+              <label class="flex flex-col gap-1">Zástava - banka
+                <input name="lien_bank" list="bank-list" class="input" />
+              </label>
+              <label class="flex flex-col gap-1">Hodnota zástavy (Kč)
+                <input name="lien_value" type="number" step="10000" min="0" class="input" />
+              </label>
+            </div>
 
             <details class="col-span-full border-t border-slate-200 pt-3 mt-1">
               <summary class="cursor-pointer text-sm font-medium text-slate-600">Predikce a náklady (pro záložku Scénáře)</summary>
               <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
                 <label class="flex flex-col gap-1">Neobsazenost (%/rok)
-                  <input name="vacancy_rate" type="number" step="0.1" value="0" class="input" />
+                  <input name="vacancy_rate" type="number" step="0.1" min="0" max="100" value="0" class="input" />
                 </label>
                 <label class="flex flex-col gap-1">Provozní náklady (Kč/měs)
-                  <input name="monthly_costs" type="number" step="1" value="0" class="input" />
+                  <input name="monthly_costs" type="number" step="100" min="0" value="0" class="input" />
                 </label>
                 <label class="flex flex-col gap-1">Růst nájmu (%/rok)
                   <input name="rent_growth_rate" type="number" step="0.1" value="0" class="input" />
                 </label>
-                <label class="flex flex-col gap-1">Navázaný úvěr
-                  <select name="linked_loan_id" class="input property-loan-select">
-                    <option value="">Bez úvěru / vlastní kapitál</option>
-                  </select>
-                </label>
                 <label class="flex flex-col gap-1">Plánovaný prodej - rok
-                  <input name="planned_sale_year" type="number" step="1" placeholder="např. 2032" class="input" />
+                  <input name="planned_sale_year" type="number" step="1" min="2000" max="2100" placeholder="např. 2032" class="input" />
                 </label>
                 <label class="flex flex-col gap-1">Plánovaný prodej - cena (Kč)
-                  <input name="planned_sale_price" type="number" step="1" placeholder="prázdné = odhad podle růstu" class="input" />
+                  <input name="planned_sale_price" type="number" step="10000" min="0" placeholder="prázdné = odhad podle růstu" class="input" />
                 </label>
               </div>
             </details>
@@ -149,7 +180,7 @@
                 <th class="py-2 pr-3 text-right">Nájem</th>
                 <th class="py-2 pr-3 text-right">Splátka</th>
                 <th class="py-2 pr-3 text-right">Tržní hodnota</th>
-                <th class="py-2 pr-3 text-right">Pořizovací cena</th>
+                <th class="py-2 pr-3 text-right">Uvolnitelný kapitál</th>
                 <th class="py-2 pr-3 text-right">Růst %</th>
                 <th class="py-2 pr-3 text-right">Po zhodnocení</th>
                 <th class="py-2 pr-3">Zástava</th>
@@ -169,16 +200,16 @@
           <form id="loan-form" class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
             <input type="hidden" name="id" />
             <label class="flex flex-col gap-1">Banka
-              <input name="bank" required class="input" />
+              <input name="bank" list="bank-list" required class="input" />
             </label>
             <label class="flex flex-col gap-1">Výše úvěru (Kč)
-              <input name="amount" type="number" step="1" class="input" />
+              <input name="amount" type="number" step="10000" min="0" class="input" />
             </label>
             <label class="flex flex-col gap-1">Úrok (%)
-              <input name="interest_rate" type="number" step="0.01" class="input" />
+              <input name="interest_rate" type="number" step="0.01" min="0" class="input" />
             </label>
             <label class="flex flex-col gap-1">Doba fixace (roky)
-              <input name="fixation_years" type="number" step="1" class="input" />
+              <input name="fixation_years" type="number" step="1" min="0" class="input" />
             </label>
             <label class="flex flex-col gap-1">Fixace od
               <input name="start_date" type="date" class="input" />
@@ -191,7 +222,7 @@
               <summary class="cursor-pointer text-sm font-medium text-slate-600">Predikce (pro záložku Scénáře)</summary>
               <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
                 <label class="flex flex-col gap-1">Zbývající splatnost od dneška (roky)
-                  <input name="term_years" type="number" step="1" value="30" class="input" />
+                  <input name="term_years" type="number" step="1" min="1" value="30" class="input" />
                 </label>
                 <label class="flex flex-col gap-1">Typ splácení
                   <select name="amortizing" class="input">
@@ -200,7 +231,7 @@
                   </select>
                 </label>
                 <label class="flex flex-col gap-1">Sazba po konci fixace (%, odhad)
-                  <input name="rate_after_fixation" type="number" step="0.01" placeholder="prázdné = stejná jako teď" class="input" />
+                  <input name="rate_after_fixation" type="number" step="0.01" min="0" placeholder="prázdné = stejná jako teď" class="input" />
                 </label>
               </div>
             </details>
@@ -239,7 +270,7 @@
           </label>
           <p class="text-xs text-slate-500 max-w-md">
             Predikce skládaně počítá růst hodnoty/nájmu a reálně umořuje úvěry (úrok/jistina) -
-            na rozdíl od záložky Přehled, která ukazuje jen jeden rok dopředu podle originálního Excelu.
+            na rozdíl od jednoho konkrétního roku na záložce Přehled.
           </p>
         </div>
 
@@ -249,11 +280,11 @@
             <div id="sc-kpi-start-equity" class="kpi-value">—</div>
           </div>
           <div class="kpi-card">
-            <div class="kpi-label">Vlastní kapitál za N let</div>
+            <div class="kpi-label" id="sc-kpi-end-equity-label">Vlastní kapitál za 20 let</div>
             <div id="sc-kpi-end-equity" class="kpi-value">—</div>
           </div>
           <div class="kpi-card">
-            <div class="kpi-label">Kumulovaný cashflow za N let</div>
+            <div class="kpi-label" id="sc-kpi-cashflow-label">Kumulovaný cashflow za 20 let</div>
             <div id="sc-kpi-cashflow" class="kpi-value">—</div>
           </div>
           <div class="kpi-card">
@@ -276,26 +307,25 @@
 
         <div class="bg-white rounded-xl border border-slate-200 p-4 mb-6">
           <h2 id="event-form-title" class="font-semibold mb-3">Přidat scénářovou událost</h2>
-          <form id="event-form" class="grid grid-cols-2 md:grid-cols-6 gap-3 text-sm">
+          <p class="text-xs text-slate-500 mb-3">
+            Událost platí pro celé portfolio (všechny nemovitosti / všechny úvěry) po zvolené období.
+          </p>
+          <form id="event-form" class="grid grid-cols-2 md:grid-cols-5 gap-3 text-sm">
             <input type="hidden" name="id" />
             <label class="flex flex-col gap-1">Typ
               <select name="type" id="event-type" class="input">
-                <option value="growth">Růst hodnoty nemovitosti</option>
+                <option value="growth">Růst hodnoty nemovitostí</option>
                 <option value="rent_growth">Růst nájmu</option>
                 <option value="vacancy">Neobsazenost</option>
-                <option value="interest_rate">Úroková sazba úvěru</option>
                 <option value="inflation">Inflace</option>
                 <option value="one_time">Jednorázový příjem/výdaj</option>
               </select>
             </label>
-            <label class="flex flex-col gap-1" id="event-target-wrap">Cíl
-              <select name="target" id="event-target" class="input"></select>
-            </label>
             <label class="flex flex-col gap-1">Rok od
-              <input name="year_from" type="number" step="1" required class="input" />
+              <input name="year_from" type="number" step="1" min="2000" max="2100" required class="input" />
             </label>
             <label class="flex flex-col gap-1">Rok do (volitelné)
-              <input name="year_to" type="number" step="1" class="input" />
+              <input name="year_to" type="number" step="1" min="2000" max="2100" class="input" />
             </label>
             <label class="flex flex-col gap-1"><span id="event-value-label">Hodnota (%)</span>
               <input name="value" type="number" step="0.1" required class="input" />
@@ -315,7 +345,6 @@
             <thead>
               <tr class="text-left text-slate-500 border-b border-slate-200">
                 <th class="py-2 pr-3">Typ</th>
-                <th class="py-2 pr-3">Cíl</th>
                 <th class="py-2 pr-3">Období</th>
                 <th class="py-2 pr-3 text-right">Hodnota</th>
                 <th class="py-2 pr-3">Poznámka</th>
@@ -353,10 +382,10 @@
               <input id="inflation-input" type="number" step="0.1" class="input" />
             </label>
             <label class="flex flex-col gap-1">Daň z příjmu z pronájmu (%)
-              <input id="rental-tax-input" type="number" step="0.1" class="input" />
+              <input id="rental-tax-input" type="number" step="0.1" min="0" max="100" class="input" />
             </label>
             <label class="flex flex-col gap-1">Daň z prodeje po časovém testu (%)
-              <input id="capgains-tax-input" type="number" step="0.1" class="input" />
+              <input id="capgains-tax-input" type="number" step="0.1" min="0" max="100" class="input" />
             </label>
             <p class="text-xs text-slate-500">
               Daňové sazby jsou orientační zjednodušení pro scénáře, ne daňové poradenství.
@@ -386,6 +415,8 @@
 
     </main>
   </div>
+
+  <datalist id="bank-list"></datalist>
 
   <script src="js/calc.js"></script>
   <script src="js/app.js"></script>
