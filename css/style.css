@@ -1,9 +1,25 @@
+html {
+  overflow-x: hidden;
+  touch-action: pan-y;
+}
+body {
+  overflow-x: hidden;
+  max-width: 100vw;
+}
+
 .tab-btn {
-  padding: 0.6rem 1rem;
-  font-size: 0.9rem;
+  padding: 0.5rem 0.7rem;
+  font-size: 0.85rem;
   font-weight: 500;
   color: #64748b;
   border-bottom: 2px solid transparent;
+  white-space: nowrap;
+}
+@media (min-width: 640px) {
+  .tab-btn {
+    padding: 0.6rem 1rem;
+    font-size: 0.9rem;
+  }
 }
 .tab-btn:hover {
   color: #1e293b;
@@ -86,4 +102,20 @@
 }
 .payment-negative {
   color: #dc2626;
+}
+
+.input-suffix-wrap {
+  position: relative;
+}
+.input-suffix-wrap .input {
+  padding-right: 2.6rem;
+}
+.input-suffix {
+  position: absolute;
+  right: 0.7rem;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.8rem;
+  color: #94a3b8;
+  pointer-events: none;
 }

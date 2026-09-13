@@ -4,21 +4,6 @@
 const STORAGE_KEY = 'investicni-kalkulacka-v1';
 const CURRENT_YEAR = new Date().getFullYear();
 
-const LOCATIONS = [
-  { key: 'vrazkov', label: 'Vražkov', rate: 5 },
-  { key: 'kralupy', label: 'Kralupy nad Vltavou', rate: 7 },
-  { key: 'vodolka', label: 'Vodolka', rate: 8 },
-  { key: 'roudnice', label: 'Roudnice nad Labem', rate: 6 },
-  { key: 'kadan', label: 'Kadaň', rate: 5 },
-  { key: 'zloncice', label: 'Zlončice', rate: 5 },
-  { key: 'usti', label: 'Ústí nad Labem', rate: 9 },
-  { key: 'olomouc', label: 'Olomouc', rate: 5.5 },
-  { key: 'praha', label: 'Praha', rate: 6 },
-  { key: 'brno', label: 'Brno', rate: 6 },
-  { key: 'ostrava', label: 'Ostrava', rate: 4 },
-  { key: 'plzen', label: 'Plzeň', rate: 5 },
-];
-
 const CZ_BANKS = [
   'Česká spořitelna',
   'ČSOB',
@@ -47,6 +32,106 @@ const fmtPercent = (n) => ((Number(n) || 0) * 100).toLocaleString('cs-CZ', { max
 
 function uid() {
   return (crypto.randomUUID ? crypto.randomUUID() : 'id-' + Date.now() + '-' + Math.random().toString(16).slice(2));
+}
+
+/* ---------- Formátovaná pole (Kč / %) - živé zarovnávání tisíců + jednotka ---------- */
+
+const UNIT_SUFFIX = { money: 'Kč', percent: '%' };
+
+function formatGroupedInteger(raw) {
+  const neg = raw.trim().startsWith('-');
+  const digits = raw.replace(/[^0-9]/g, '');
+  if (!digits) return neg ? '-' : '';
+  const grouped = digits.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  return (neg ? '-' : '') + grouped;
+}
+
+function formatDecimalValue(raw) {
+  const neg = raw.trim().startsWith('-');
+  let cleaned = raw.replace(/[^0-9.,]/g, '').replace(',', '.');
+  const parts = cleaned.split('.');
+  if (parts.length > 2) cleaned = parts[0] + '.' + parts.slice(1).join('');
+  return (neg ? '-' : '') + cleaned;
+}
+
+function parseFormNumber(str) {
+  if (!str) return 0;
+  const cleaned = String(str).replace(/\s/g, '').replace(',', '.');
+  const n = Number(cleaned);
+  return isNaN(n) ? 0 : n;
+}
+
+function formatInputHandler(kind) {
+  return function () {
+    const el = this;
+    const cursorFromEnd = el.value.length - el.selectionStart;
+    const formatted = kind === 'percent' ? formatDecimalValue(el.value) : formatGroupedInteger(el.value);
+    el.value = formatted;
+    const newPos = Math.max(formatted.length - cursorFromEnd, 0);
+    try {
+      el.setSelectionRange(newPos, newPos);
+    } catch (e) {
+      /* input typu, ktery selectionRange nepodporuje - nevadi */
+    }
+  };
+}
+
+function setFieldUnit(el, kind) {
+  if (el._formatHandler) el.removeEventListener('input', el._formatHandler);
+  el._formatHandler = formatInputHandler(kind);
+  el.addEventListener('input', el._formatHandler);
+  el.dataset.unit = kind;
+  const suffixEl = el.parentElement.querySelector('.input-suffix');
+  if (suffixEl) suffixEl.textContent = UNIT_SUFFIX[kind] || '';
+  el.dispatchEvent(new Event('input'));
+}
+
+function wireFormattedInputs() {
+  document.querySelectorAll('[data-unit]').forEach((el) => {
+    const kind = el.dataset.unit;
+    el.setAttribute('type', 'text');
+    el.setAttribute('inputmode', kind === 'percent' ? 'decimal' : 'numeric');
+    el.setAttribute('autocomplete', 'off');
+
+    const wrap = document.createElement('div');
+    wrap.className = 'input-suffix-wrap';
+    el.parentNode.insertBefore(wrap, el);
+    wrap.appendChild(el);
+    const suffix = document.createElement('span');
+    suffix.className = 'input-suffix';
+    suffix.textContent = UNIT_SUFFIX[kind] || '';
+    wrap.appendChild(suffix);
+
+    el._formatHandler = formatInputHandler(kind);
+    el.addEventListener('input', el._formatHandler);
+  });
+}
+
+/** Nastaví hodnotu formátovaného pole a hned ji přeformátuje (mezery/desetinná čárka). */
+function setFormattedValue(el, value) {
+  el.value = value === null || value === undefined || value === '' ? '' : value;
+  el.dispatchEvent(new Event('input'));
+}
+
+/* ---------- Klik do pole s "0" ho smaže; Enter v seznamových formulářích nic neodešle ---------- */
+
+function wireZeroClearsOnFocus() {
+  document.addEventListener('focusin', (e) => {
+    const el = e.target;
+    if (el.tagName === 'INPUT' && el.classList.contains('input') && el.value.trim() === '0') {
+      el.value = '';
+    }
+  });
+}
+
+function preventEnterSubmit(form) {
+  form.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return;
+    const isSubmitBtn = e.target.tagName === 'BUTTON' && e.target.type === 'submit';
+    if (isSubmitBtn) return;
+    e.preventDefault();
+    e.target.blur();
+  });
 }
 
 /* ---------- Perzistence (localStorage) ---------- */
@@ -88,8 +173,9 @@ function init() {
   wireBackup();
   wireLienToggle();
   wireOverviewControls();
-  populateLocationOptions();
+  wireZeroClearsOnFocus();
   populateBankList();
+  wireFormattedInputs();
   syncLienFieldsVisibility();
   resetEventForm();
   document.getElementById('event-type').addEventListener('change', updateEventValueLabel);
@@ -124,23 +210,7 @@ function wireTabs() {
   });
 }
 
-/* ---------- Lokality a banky (číselníky) ---------- */
-
-function populateLocationOptions() {
-  const sel = document.getElementById('property-location');
-  for (const loc of LOCATIONS) {
-    const opt = document.createElement('option');
-    opt.value = loc.key;
-    opt.textContent = `${loc.label} (${loc.rate} %)`;
-    sel.appendChild(opt);
-  }
-  sel.addEventListener('change', () => {
-    const loc = LOCATIONS.find((l) => l.key === sel.value);
-    if (loc) {
-      document.getElementById('property-form').elements['growth_rate'].value = loc.rate;
-    }
-  });
-}
+/* ---------- Banky (číselník) ---------- */
 
 function populateBankList() {
   const dl = document.getElementById('bank-list');
@@ -159,10 +229,11 @@ function wireLienToggle() {
 
 function syncLienFieldsVisibility() {
   const checked = document.getElementById('property-has-lien').checked;
-  document.getElementById('property-lien-fields').className = checked ? 'contents' : 'hidden';
+  document.getElementById('lien-bank-label').classList.toggle('hidden', !checked);
+  document.getElementById('lien-value-label').classList.toggle('hidden', !checked);
 }
 
-/* ---------- NEMOVITOSTI ---------- */
+/* ---------- MOJE NEMOVITOSTI ---------- */
 
 function renderProperties() {
   const tbody = document.getElementById('properties-tbody');
@@ -208,24 +279,21 @@ function fillPropertyForm(id) {
   const f = document.getElementById('property-form');
   f.elements['id'].value = p.id;
   f.elements['name'].value = p.name;
-  f.elements['rent'].value = p.rent;
-  f.elements['payment'].value = p.payment;
-  f.elements['market_value'].value = p.market_value;
-  f.elements['acquisition_price'].value = p.acquisition_price;
-  f.elements['location'].value = p.location || '';
-  f.elements['growth_rate'].value = p.growth_rate * 100;
+  setFormattedValue(f.elements['rent'], p.rent);
+  setFormattedValue(f.elements['payment'], p.payment);
+  setFormattedValue(f.elements['market_value'], p.market_value);
+  setFormattedValue(f.elements['acquisition_price'], p.acquisition_price);
+  setFormattedValue(f.elements['growth_rate'], p.growth_rate * 100);
   f.elements['acquisition_date'].value = p.acquisition_date || '';
   f.elements['tax_exempt_years'].value = p.tax_exempt_years || 10;
-  f.elements['equity_invested'].value = p.equity_invested || '';
-  f.elements['debt_invested'].value = p.debt_invested || '';
+  setFormattedValue(f.elements['equity_invested'], p.equity_invested || '');
+  setFormattedValue(f.elements['debt_invested'], p.debt_invested || '');
   f.elements['has_lien'].checked = !!p.has_lien;
   f.elements['lien_bank'].value = p.lien_bank || '';
-  f.elements['lien_value'].value = p.lien_value || '';
-  f.elements['vacancy_rate'].value = (p.vacancy_rate || 0) * 100;
-  f.elements['monthly_costs'].value = p.monthly_costs || 0;
-  f.elements['rent_growth_rate'].value = (p.rent_growth_rate || 0) * 100;
-  f.elements['planned_sale_year'].value = p.planned_sale_year || '';
-  f.elements['planned_sale_price'].value = p.planned_sale_price || '';
+  setFormattedValue(f.elements['lien_value'], p.lien_value || '');
+  setFormattedValue(f.elements['vacancy_rate'], (p.vacancy_rate || 0) * 100);
+  setFormattedValue(f.elements['monthly_costs'], p.monthly_costs || 0);
+  setFormattedValue(f.elements['rent_growth_rate'], p.rent_growth_rate != null ? p.rent_growth_rate * 100 : '');
   syncLienFieldsVisibility();
   document.getElementById('property-form-title').textContent = 'Upravit nemovitost';
 }
@@ -250,27 +318,25 @@ function submitPropertyForm(e) {
   e.preventDefault();
   const f = e.target;
   const id = f.elements['id'].value;
+  const rentGrowthRaw = f.elements['rent_growth_rate'].value.trim();
   const payload = {
     id: id || uid(),
     name: f.elements['name'].value.trim(),
-    rent: Number(f.elements['rent'].value) || 0,
-    payment: Number(f.elements['payment'].value) || 0,
-    market_value: Number(f.elements['market_value'].value) || 0,
-    acquisition_price: Number(f.elements['acquisition_price'].value) || 0,
-    location: f.elements['location'].value || null,
-    growth_rate: (Number(f.elements['growth_rate'].value) || 0) / 100,
+    rent: parseFormNumber(f.elements['rent'].value),
+    payment: parseFormNumber(f.elements['payment'].value),
+    market_value: parseFormNumber(f.elements['market_value'].value),
+    acquisition_price: parseFormNumber(f.elements['acquisition_price'].value),
+    growth_rate: parseFormNumber(f.elements['growth_rate'].value) / 100,
     acquisition_date: f.elements['acquisition_date'].value || null,
     tax_exempt_years: Number(f.elements['tax_exempt_years'].value) || 10,
-    equity_invested: f.elements['equity_invested'].value ? Number(f.elements['equity_invested'].value) : null,
-    debt_invested: f.elements['debt_invested'].value ? Number(f.elements['debt_invested'].value) : null,
+    equity_invested: f.elements['equity_invested'].value.trim() ? parseFormNumber(f.elements['equity_invested'].value) : null,
+    debt_invested: f.elements['debt_invested'].value.trim() ? parseFormNumber(f.elements['debt_invested'].value) : null,
     has_lien: f.elements['has_lien'].checked,
     lien_bank: f.elements['has_lien'].checked ? f.elements['lien_bank'].value.trim() || null : null,
-    lien_value: f.elements['has_lien'].checked && f.elements['lien_value'].value ? Number(f.elements['lien_value'].value) : null,
-    vacancy_rate: (Number(f.elements['vacancy_rate'].value) || 0) / 100,
-    monthly_costs: Number(f.elements['monthly_costs'].value) || 0,
-    rent_growth_rate: (Number(f.elements['rent_growth_rate'].value) || 0) / 100,
-    planned_sale_year: f.elements['planned_sale_year'].value ? Number(f.elements['planned_sale_year'].value) : null,
-    planned_sale_price: f.elements['planned_sale_price'].value ? Number(f.elements['planned_sale_price'].value) : null,
+    lien_value: f.elements['has_lien'].checked && f.elements['lien_value'].value.trim() ? parseFormNumber(f.elements['lien_value'].value) : null,
+    vacancy_rate: parseFormNumber(f.elements['vacancy_rate'].value) / 100,
+    monthly_costs: parseFormNumber(f.elements['monthly_costs'].value),
+    rent_growth_rate: rentGrowthRaw ? parseFormNumber(rentGrowthRaw) / 100 : null,
   };
   if (id) {
     const idx = state.properties.findIndex((p) => p.id === id);
@@ -283,7 +349,7 @@ function submitPropertyForm(e) {
   renderAll();
 }
 
-/* ---------- FIXACE / ÚVĚRY ---------- */
+/* ---------- MOJE ÚVĚRY ---------- */
 
 function renderLoans() {
   const tbody = document.getElementById('loans-tbody');
@@ -320,14 +386,14 @@ function fillLoanForm(id) {
   const f = document.getElementById('loan-form');
   f.elements['id'].value = l.id;
   f.elements['bank'].value = l.bank;
-  f.elements['amount'].value = l.amount;
-  f.elements['interest_rate'].value = l.interest_rate * 100;
+  setFormattedValue(f.elements['amount'], l.amount);
+  setFormattedValue(f.elements['interest_rate'], l.interest_rate * 100);
   f.elements['fixation_years'].value = l.fixation_years;
   f.elements['start_date'].value = l.start_date || '';
   f.elements['note'].value = l.note || '';
   f.elements['term_years'].value = l.term_years || 30;
   f.elements['amortizing'].value = l.amortizing === false ? 'false' : 'true';
-  f.elements['rate_after_fixation'].value = l.rate_after_fixation != null ? l.rate_after_fixation : '';
+  setFormattedValue(f.elements['rate_after_fixation'], l.rate_after_fixation != null ? l.rate_after_fixation : '');
   document.getElementById('loan-form-title').textContent = 'Upravit úvěr';
 }
 
@@ -349,18 +415,18 @@ function submitLoanForm(e) {
   e.preventDefault();
   const f = e.target;
   const id = f.elements['id'].value;
-  const rateAfterRaw = f.elements['rate_after_fixation'].value;
+  const rateAfterRaw = f.elements['rate_after_fixation'].value.trim();
   const payload = {
     id: id || uid(),
     bank: f.elements['bank'].value.trim(),
-    amount: Number(f.elements['amount'].value) || 0,
-    interest_rate: (Number(f.elements['interest_rate'].value) || 0) / 100,
+    amount: parseFormNumber(f.elements['amount'].value),
+    interest_rate: parseFormNumber(f.elements['interest_rate'].value) / 100,
     fixation_years: Number(f.elements['fixation_years'].value) || 5,
     start_date: f.elements['start_date'].value || null,
     note: f.elements['note'].value.trim() || null,
     term_years: Number(f.elements['term_years'].value) || 30,
     amortizing: f.elements['amortizing'].value !== 'false',
-    rate_after_fixation: rateAfterRaw ? Number(rateAfterRaw) : null,
+    rate_after_fixation: rateAfterRaw ? parseFormNumber(rateAfterRaw) : null,
   };
   if (id) {
     const idx = state.loans.findIndex((l) => l.id === id);
@@ -376,16 +442,16 @@ function submitLoanForm(e) {
 /* ---------- NASTAVENÍ ---------- */
 
 function renderSettings() {
-  document.getElementById('inflation-input').value = (state.settings.inflation_rate * 100).toFixed(2);
-  document.getElementById('rental-tax-input').value = state.settings.rental_tax_rate;
-  document.getElementById('capgains-tax-input').value = state.settings.capital_gains_tax_rate;
+  setFormattedValue(document.getElementById('inflation-input'), (state.settings.inflation_rate * 100).toFixed(2));
+  setFormattedValue(document.getElementById('rental-tax-input'), state.settings.rental_tax_rate);
+  setFormattedValue(document.getElementById('capgains-tax-input'), state.settings.capital_gains_tax_rate);
 }
 
 function submitSettingsForm(e) {
   e.preventDefault();
-  state.settings.inflation_rate = (Number(document.getElementById('inflation-input').value) || 0) / 100;
-  state.settings.rental_tax_rate = Number(document.getElementById('rental-tax-input').value) || 0;
-  state.settings.capital_gains_tax_rate = Number(document.getElementById('capgains-tax-input').value) || 0;
+  state.settings.inflation_rate = parseFormNumber(document.getElementById('inflation-input').value) / 100;
+  state.settings.rental_tax_rate = parseFormNumber(document.getElementById('rental-tax-input').value);
+  state.settings.capital_gains_tax_rate = parseFormNumber(document.getElementById('capgains-tax-input').value);
   saveState();
   renderScenario();
   renderOverview();
@@ -403,7 +469,9 @@ const EVENT_LABELS = {
 
 function updateEventValueLabel() {
   const type = document.getElementById('event-type').value;
-  document.getElementById('event-value-label').textContent = type === 'one_time' ? 'Hodnota (Kč)' : 'Hodnota (%)';
+  const isMoney = type === 'one_time';
+  document.getElementById('event-value-label').textContent = isMoney ? 'Hodnota (Kč)' : 'Hodnota (%)';
+  setFieldUnit(document.getElementById('event-value-input'), isMoney ? 'money' : 'percent');
 }
 
 function renderEvents() {
@@ -441,9 +509,9 @@ function fillEventForm(id) {
   f.elements['type'].value = ev.type;
   f.elements['year_from'].value = ev.year_from;
   f.elements['year_to'].value = ev.year_to && ev.year_to !== ev.year_from ? ev.year_to : '';
-  f.elements['value'].value = ev.value;
-  f.elements['note'].value = ev.note || '';
   updateEventValueLabel();
+  setFormattedValue(f.elements['value'], ev.value);
+  f.elements['note'].value = ev.note || '';
   document.getElementById('event-form-title').textContent = 'Upravit scénářovou událost';
 }
 
@@ -476,7 +544,7 @@ function submitEventForm(e) {
     type: f.elements['type'].value,
     year_from: yearFrom,
     year_to: yearToRaw ? Number(yearToRaw) : yearFrom,
-    value: Number(f.elements['value'].value) || 0,
+    value: parseFormNumber(f.elements['value'].value),
     note: f.elements['note'].value.trim() || null,
   };
   if (id) {
@@ -533,7 +601,7 @@ function renderScenario() {
       <td class="py-1.5 pr-3 text-right">${fmtMoney(r.totalValue)}</td>
       <td class="py-1.5 pr-3 text-right">${fmtMoney(r.totalDebt)}</td>
       <td class="py-1.5 pr-3 text-right font-medium">${fmtMoney(r.equity)}</td>
-      <td class="py-1.5 pr-3 text-right ${r.cashflow < 0 ? 'text-red-600' : ''}">${fmtMoney(r.cashflow)}</td>
+      <td class="py-1.5 pr-3 text-right ${r.cashflow < 0 ? 'text-red-600' : ''}">${r.cashflow === null ? '—' : fmtMoney(r.cashflow)}</td>
       <td class="py-1.5 pr-3 text-right">${fmtMoney(r.cumulativeCashflow)}</td>`;
     tbody.appendChild(tr);
   }
@@ -645,10 +713,10 @@ function renderOverview() {
   document.getElementById('kpi-debt').textContent = fmtMoney(row.totalDebt);
   document.getElementById('kpi-networth').textContent = fmtMoney(row.equity);
   document.getElementById('kpi-debtratio').textContent = row.totalValue > 0 ? fmtPercent(row.totalDebt / row.totalValue) : '0 %';
-  document.getElementById('kpi-cashflow').textContent = fmtMoney(row.cashflow / div);
-  document.getElementById('kpi-appreciation').textContent = fmtMoney(row.appreciationGain / div);
-  document.getElementById('kpi-inflation-loss').textContent = fmtMoney(row.inflationLoss / div);
-  document.getElementById('kpi-real-appreciation').textContent = fmtMoney(row.realAppreciation / div);
+  document.getElementById('kpi-cashflow').textContent = fmtMoney((row.cashflow || 0) / div);
+  document.getElementById('kpi-appreciation').textContent = fmtMoney((row.appreciationGain || 0) / div);
+  document.getElementById('kpi-inflation-loss').textContent = fmtMoney((row.inflationLoss || 0) / div);
+  document.getElementById('kpi-real-appreciation').textContent = fmtMoney((row.realAppreciation || 0) / div);
   document.getElementById('kpi-projected-value').textContent = fmtMoney(nextRow.totalValue);
 
   document.getElementById('kpi-cashflow-label').textContent = isMonth ? 'Měsíční cashflow' : 'Roční cashflow';
@@ -657,17 +725,17 @@ function renderOverview() {
   document.getElementById('kpi-real-appreciation-label').textContent = isMonth ? 'Zbývá po inflaci (měsíc)' : 'Zbývá po inflaci (rok)';
 
   const cashflowEl = document.getElementById('kpi-cashflow');
-  cashflowEl.classList.toggle('text-red-600', row.cashflow < 0);
-  cashflowEl.classList.toggle('text-emerald-600', row.cashflow >= 0);
+  cashflowEl.classList.toggle('text-red-600', (row.cashflow || 0) < 0);
+  cashflowEl.classList.toggle('text-emerald-600', (row.cashflow || 0) >= 0);
   const realAppEl = document.getElementById('kpi-real-appreciation');
-  realAppEl.classList.toggle('text-red-600', row.realAppreciation < 0);
-  realAppEl.classList.toggle('text-emerald-600', row.realAppreciation >= 0);
+  realAppEl.classList.toggle('text-red-600', (row.realAppreciation || 0) < 0);
+  realAppEl.classList.toggle('text-emerald-600', (row.realAppreciation || 0) >= 0);
 
   renderRecommendation();
 }
 
 function renderRecommendation() {
-  const rec = calc.recommendActions(state.properties, state.loans, new Date());
+  const rec = calc.recommendActions(state.properties, state.loans, state.settings, new Date());
   const el = document.getElementById('recommendation-content');
   if (!rec) {
     el.innerHTML = '<p>Zatím nemáš dost dat (přidej nemovitosti a úvěry) pro doporučení.</p>';
@@ -676,9 +744,12 @@ function renderRecommendation() {
   let html = '';
   if (rec.bestProperty) {
     const bp = rec.bestProperty;
+    const taxNote = bp.taxExempt
+      ? 'časový test už splněn — prodej by byl bez daně z příjmu'
+      : `časový test zbývá ${bp.timeTestText} — prodej nyní by podléhal odhadované dani cca ${fmtMoney(bp.estimatedSaleTax)}`;
     html += `<div>
       <p class="font-medium text-slate-800">Nejvhodnější k prodeji: ${escapeHtml(bp.property.name)}</p>
-      <p class="text-xs text-slate-500">Zhodnocení ${fmtPercent(bp.gainPct)} (${fmtMoney(bp.gain)}), časový test ${bp.taxExempt ? 'už splněn' : 'zbývá ' + bp.timeTestText}, provozní výnos ${fmtPercent(bp.yieldPct)} ročně z tržní hodnoty.</p>
+      <p class="text-xs text-slate-500">Zhodnocení ${fmtPercent(bp.gainPct)} (${fmtMoney(bp.gain)}), ${taxNote}, provozní výnos ${fmtPercent(bp.yieldPct)} ročně z tržní hodnoty.</p>
     </div>`;
   }
   if (rec.worstLoan) {
@@ -773,12 +844,19 @@ function escapeHtml(str) {
 }
 
 function wireForms() {
-  document.getElementById('property-form').addEventListener('submit', submitPropertyForm);
+  const forms = [
+    ['property-form', submitPropertyForm],
+    ['loan-form', submitLoanForm],
+    ['settings-form', submitSettingsForm],
+    ['event-form', submitEventForm],
+  ];
+  for (const [id, handler] of forms) {
+    const form = document.getElementById(id);
+    form.addEventListener('submit', handler);
+    preventEnterSubmit(form);
+  }
   document.getElementById('property-form-reset').addEventListener('click', resetPropertyForm);
-  document.getElementById('loan-form').addEventListener('submit', submitLoanForm);
   document.getElementById('loan-form-reset').addEventListener('click', resetLoanForm);
-  document.getElementById('settings-form').addEventListener('submit', submitSettingsForm);
-  document.getElementById('event-form').addEventListener('submit', submitEventForm);
   document.getElementById('event-form-reset').addEventListener('click', resetEventForm);
 }
 

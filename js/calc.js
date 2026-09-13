@@ -9,19 +9,6 @@ function appreciatedValue(marketValue, growthRate) {
   return marketValue * (1 + (growthRate || 0));
 }
 
-/** Součty za celé portfolio nemovitostí (list objektů properties). */
-function portfolioTotals(properties) {
-  const totals = { marketValue: 0, acquisitionPrice: 0, rent: 0, payment: 0, appreciatedValue: 0 };
-  for (const p of properties) {
-    totals.marketValue += Number(p.market_value) || 0;
-    totals.acquisitionPrice += Number(p.acquisition_price) || 0;
-    totals.rent += Number(p.rent) || 0;
-    totals.payment += Number(p.payment) || 0;
-    totals.appreciatedValue += appreciatedValue(Number(p.market_value) || 0, Number(p.growth_rate) || 0);
-  }
-  return totals;
-}
-
 /**
  * Kalendářní rozdíl mezi dvěma daty, ekvivalent Excel DATEDIF("y")/("ym")/("md") dohromady.
  * Předpokládá to >= from. Vrací { years, months, days }.
@@ -130,14 +117,21 @@ function loanRateForYear(loan, loanStartYear, year) {
  * Hlavní simulace portfolia na `horizonYears` let dopředu.
  * properties/loans/settings: stejná data jako jinde v appce.
  * events: pole { type: 'growth'|'rent_growth'|'vacancy'|'inflation'|'one_time', year_from, year_to, value, note }
- * Vrací { rows, summary }.
+ *
+ * Model odděluje STAV (majetek/dluh k danému roku) a TOK (co se stane BĚHEM
+ * přechodu do dalšího roku - zhodnocení, nájem, splátky, daň). rows[k].* jsou
+ * stavové veličiny NA ZAČÁTKU roku k (rows[0] = přesně dnešek, beze změny) a
+ * tokové veličiny (cashflow, zhodnocení, daň...) za rok, který z něj vychází.
+ * Poslední řádek má jen stav (nemá už žádný další rok, ze kterého by tok počítal).
+ * Daň z příjmu z pronájmu se tak počítá stejně pro "dnešek" i pro všechny
+ * budoucí roky - na rozdíl od daně z prodeje se časového testu netýká.
  */
 function projectPortfolio({ properties, loans, settings, events, horizonYears, startYear }) {
   startYear = startYear || new Date().getFullYear();
   events = events || [];
   horizonYears = Math.max(1, Number(horizonYears) || 1);
   const rentalTaxRate = (Number(settings.rental_tax_rate) || 0) / 100;
-  const capGainsTaxRate = (Number(settings.capital_gains_tax_rate) || 0) / 100;
+  const inflationBase = Number(settings.inflation_rate) || 0;
 
   const loanState = {};
   for (const l of loans) {
@@ -157,114 +151,71 @@ function projectPortfolio({ properties, loans, settings, events, horizonYears, s
   let cumulativeCashflow = 0;
   const rows = [];
 
-  // Rok 0 = dnešek, spočítaný stejným jednoročním vzorcem jako originální Excel.
-  const ownedToday = properties.filter((p) => yearOf(p.acquisition_date, startYear) <= startYear);
-  const pt0 = portfolioTotals(ownedToday);
-  const debt0 = loans.reduce((s, l) => s + (Number(l.amount) || 0), 0);
-  const appreciation0 = pt0.appreciatedValue - pt0.marketValue;
-  const inflation0 = resolvePortfolioRate(events, 'inflation', startYear, Number(settings.inflation_rate) || 0);
-  const inflationLoss0 = pt0.marketValue * inflation0;
-  rows.push({
-    year: startYear,
-    realEstateValue: pt0.marketValue,
-    cashReserve: 0,
-    totalValue: pt0.marketValue,
-    totalDebt: debt0,
-    equity: pt0.marketValue - debt0,
-    cashflow: (pt0.rent - pt0.payment) * 12,
-    cumulativeCashflow: 0,
-    appreciationGain: appreciation0,
-    inflationLoss: inflationLoss0,
-    realAppreciation: appreciation0 - inflationLoss0,
-    taxes: 0,
-    perProperty: ownedToday.map((p) => ({
-      id: p.id,
-      name: p.name,
-      value: Number(p.market_value) || 0,
-      cashflow: (Number(p.rent) - Number(p.payment)) * 12,
-      sold: false,
-    })),
-  });
+  for (let k = 0; k <= horizonYears; k++) {
+    const stateYear = startYear + k;
+    const activeProps = properties.filter((p) => yearOf(p.acquisition_date, startYear) <= stateYear);
+    const realEstateValue = activeProps.reduce((s, p) => s + curValue[p.id], 0);
+    const totalDebt = loans.reduce((s, l) => s + loanState[l.id].remainingPrincipal, 0);
+    const totalValue = realEstateValue + cashReserve;
+    const equity = totalValue - totalDebt;
 
-  for (let y = 1; y <= horizonYears; y++) {
-    const year = startYear + y;
-    const inflation = resolvePortfolioRate(events, 'inflation', year, Number(settings.inflation_rate) || 0);
-
-    let realEstateValue = 0;
-    let appreciationGain = 0;
-    let totalRentNOI = 0;
-    let saleTax = 0;
-    const perProperty = [];
-
-    for (const p of properties) {
-      const acqYear = yearOf(p.acquisition_date, startYear);
-      if (acqYear > year) continue; // ještě není pořízeno
-      if (p.planned_sale_year && year > Number(p.planned_sale_year)) continue; // už prodáno dřív
-
-      const growth = resolvePortfolioRate(events, 'growth', year, Number(p.growth_rate) || 0);
-      const rentGrowth = resolvePortfolioRate(events, 'rent_growth', year, Number(p.rent_growth_rate) || 0);
-      const vacancy = resolvePortfolioRate(events, 'vacancy', year, Number(p.vacancy_rate) || 0);
-
-      if (acqYear < year) {
-        const before = curValue[p.id];
-        curValue[p.id] *= 1 + growth;
-        appreciationGain += curValue[p.id] - before;
-        curRent[p.id] *= 1 + rentGrowth;
-        curCost[p.id] *= 1 + inflation;
-      }
-
-      const rentAnnual = curRent[p.id] * 12 * (1 - vacancy);
-      const costsAnnual = curCost[p.id];
-      const propertyNOI = rentAnnual - costsAnnual;
-
-      const isSoldThisYear = p.planned_sale_year && Number(p.planned_sale_year) === year;
-      if (isSoldThisYear) {
-        const salePrice = p.planned_sale_price ? Number(p.planned_sale_price) : curValue[p.id];
-        const acqDate = p.acquisition_date ? new Date(p.acquisition_date) : null;
-        const exemptYears = Number(p.tax_exempt_years) || 10;
-        const isExempt = acqDate ? year >= acqDate.getFullYear() + exemptYears : false;
-        const gain = salePrice - (Number(p.acquisition_price) || 0);
-        const capGainsTax = isExempt ? 0 : Math.max(gain, 0) * capGainsTaxRate;
-        const netProceeds = salePrice - capGainsTax;
-        saleTax += capGainsTax;
-
-        // Peníze z prodeje nejdřív splatí "cizí kapitál" navázaný na tuhle
-        // nemovitost - přednostně u úvěru s nejvyšší aktuální sazbou (nejdřív
-        // se zbavit toho nejnevýhodnějšího dluhu).
-        const payoffBudget = Math.min(Number(p.debt_invested) || 0, netProceeds);
-        let remainingBudget = payoffBudget;
-        const loansByRateDesc = [...loans].sort(
-          (a, b) => loanRateForYear(b, loanState[b.id].startYear, year) - loanRateForYear(a, loanState[a.id].startYear, year)
-        );
-        for (const l of loansByRateDesc) {
-          if (remainingBudget <= 0) break;
-          const ls = loanState[l.id];
-          const pay = Math.min(ls.remainingPrincipal, remainingBudget);
-          ls.remainingPrincipal -= pay;
-          remainingBudget -= pay;
-        }
-        const actuallyPaidDown = payoffBudget - remainingBudget;
-        cashReserve += netProceeds - actuallyPaidDown;
-
-        perProperty.push({ id: p.id, name: p.name, value: 0, cashflow: propertyNOI, sold: true, saleProceeds: netProceeds, debtPaidOff: actuallyPaidDown });
-      } else {
-        realEstateValue += curValue[p.id];
-        totalRentNOI += propertyNOI;
-        perProperty.push({ id: p.id, name: p.name, value: curValue[p.id], cashflow: propertyNOI, sold: false });
-      }
+    if (k === horizonYears) {
+      rows.push({
+        year: stateYear,
+        realEstateValue,
+        cashReserve,
+        totalValue,
+        totalDebt,
+        equity,
+        cashflow: null,
+        cumulativeCashflow,
+        appreciationGain: null,
+        inflationLoss: null,
+        realAppreciation: null,
+        taxes: null,
+        perProperty: activeProps.map((p) => ({ id: p.id, name: p.name, value: curValue[p.id] })),
+      });
+      break;
     }
 
-    // Úvěry se umořují nezávisle na konkrétní nemovitosti (agregovaně za portfolio).
-    let totalDebt = 0;
+    // --- TOK: co se stane během přechodu ze stateYear do stateYear+1 ---
+    const targetYear = stateYear + 1;
+    const inflation = resolvePortfolioRate(events, 'inflation', targetYear, inflationBase);
+
+    let appreciationGain = 0;
+    let totalRentNOI = 0;
+    const perProperty = [];
+
+    for (const p of activeProps) {
+      const growth = resolvePortfolioRate(events, 'growth', targetYear, Number(p.growth_rate) || 0);
+      const rentGrowthBase = p.rent_growth_rate != null ? Number(p.rent_growth_rate) : inflationBase;
+      const rentGrowth = resolvePortfolioRate(events, 'rent_growth', targetYear, rentGrowthBase);
+      const vacancy = resolvePortfolioRate(events, 'vacancy', targetYear, Number(p.vacancy_rate) || 0);
+
+      const valueBefore = curValue[p.id];
+      const rentThisYear = curRent[p.id];
+      const costThisYear = curCost[p.id];
+
+      curValue[p.id] = valueBefore * (1 + growth);
+      curRent[p.id] = curRent[p.id] * (1 + rentGrowth);
+      curCost[p.id] = curCost[p.id] * (1 + inflation);
+
+      appreciationGain += curValue[p.id] - valueBefore;
+      const propertyNOI = rentThisYear * 12 * (1 - vacancy) - costThisYear;
+      totalRentNOI += propertyNOI;
+      perProperty.push({ id: p.id, name: p.name, value: valueBefore, cashflow: propertyNOI });
+    }
+
+    // Úvěry se umořují agregovaně za portfolio (nezávisle na konkrétní nemovitosti).
     let totalInterest = 0;
     let totalPrincipal = 0;
     for (const l of loans) {
       const ls = loanState[l.id];
-      if (ls.remainingPrincipal > 0 && year >= ls.startYear) {
-        const rate = loanRateForYear(l, ls.startYear, year);
+      if (ls.remainingPrincipal > 0 && stateYear >= ls.startYear) {
+        const rate = loanRateForYear(l, ls.startYear, targetYear);
         const monthlyRate = rate / 12;
         const termBaseYear = Math.max(ls.startYear, startYear);
-        const elapsedMonths = Math.max((year - termBaseYear) * 12, 0);
+        const elapsedMonths = Math.max((stateYear - termBaseYear) * 12, 0);
         const totalMonths = (Number(l.term_years) || 30) * 12;
         const remainingMonths = Math.max(totalMonths - elapsedMonths, 0);
 
@@ -286,37 +237,36 @@ function projectPortfolio({ properties, loans, settings, events, horizonYears, s
           ls.remainingPrincipal = Math.max(principal, 0);
         }
       }
-      totalDebt += ls.remainingPrincipal;
     }
 
+    // Daň z příjmu z pronájmu (§9 ZDP) - platí se KAŽDÝ rok, dokud se pronajímá,
+    // bez ohledu na časový test (ten se týká jen daně z PRODEJE, viz recommendActions).
     const taxBase = totalRentNOI - totalInterest;
-    const rentalTax = Math.max(taxBase, 0) * rentalTaxRate;
-    const taxes = rentalTax + saleTax;
+    const tax = Math.max(taxBase, 0) * rentalTaxRate;
 
     const oneTimeTotal = events
-      .filter((e) => e.type === 'one_time' && year >= Number(e.year_from) && year <= Number(e.year_to || e.year_from))
+      .filter((e) => e.type === 'one_time' && targetYear >= Number(e.year_from) && targetYear <= Number(e.year_to || e.year_from))
       .reduce((s, e) => s + (Number(e.value) || 0), 0);
     cashReserve += oneTimeTotal;
 
-    const cashflow = totalRentNOI - totalInterest - totalPrincipal - rentalTax + oneTimeTotal;
+    const cashflow = totalRentNOI - totalInterest - totalPrincipal - tax + oneTimeTotal;
     cumulativeCashflow += cashflow;
 
-    const totalValue = realEstateValue + cashReserve;
     const inflationLoss = realEstateValue * inflation;
 
     rows.push({
-      year,
+      year: stateYear,
       realEstateValue,
       cashReserve,
       totalValue,
       totalDebt,
-      equity: totalValue - totalDebt,
+      equity,
       cashflow,
       cumulativeCashflow,
       appreciationGain,
       inflationLoss,
       realAppreciation: appreciationGain - inflationLoss,
-      taxes,
+      taxes: tax,
       perProperty,
     });
   }
@@ -342,13 +292,20 @@ function projectPortfolio({ properties, loans, settings, events, horizonYears, s
  * Doporučení: kterou nemovitost má smysl zvážit k prodeji (vysoké zhodnocení,
  * ideálně po časovém testu, slabý provozní výnos) a který úvěr splatit
  * přednostně (nejvyšší úrok). Transparentní bodování, ne černá skříňka.
+ *
+ * estimatedSaleTax = odhad daně z příjmu z PRODEJE, KDYBY se nemovitost prodala
+ * teď. Na rozdíl od daně z pronájmu (viz projectPortfolio) se tahle daň platí
+ * jen jednou při prodeji a jen pokud ještě neuplynul časový test - po jeho
+ * splnění je zisk z prodeje od daně osvobozen (§4 ZDP).
  */
-function recommendActions(properties, loans, today = new Date()) {
+function recommendActions(properties, loans, settings, today = new Date()) {
+  const capGainsTaxRate = (Number(settings.capital_gains_tax_rate) || 0) / 100;
+
   let bestProperty = null;
   let bestScore = -Infinity;
   for (const p of properties) {
     const marketValue = Number(p.market_value) || 0;
-    if (marketValue <= 0 || p.planned_sale_year) continue;
+    if (marketValue <= 0) continue;
     const gain = marketValue - (Number(p.acquisition_price) || 0);
     const gainPct = gain / marketValue;
     const tt = p.acquisition_date
@@ -357,11 +314,12 @@ function recommendActions(properties, loans, today = new Date()) {
     const rentAnnual = (Number(p.rent) || 0) * 12 * (1 - (Number(p.vacancy_rate) || 0));
     const costsAnnual = (Number(p.monthly_costs) || 0) * 12;
     const yieldPct = (rentAnnual - costsAnnual) / marketValue;
+    const estimatedSaleTax = tt.done ? 0 : Math.max(gain, 0) * capGainsTaxRate;
 
     const score = gainPct * 2 + (tt.done ? 0.5 : -0.3) - yieldPct * 1.5;
     if (score > bestScore) {
       bestScore = score;
-      bestProperty = { property: p, gain, gainPct, taxExempt: tt.done, timeTestText: tt.text, yieldPct };
+      bestProperty = { property: p, gain, gainPct, taxExempt: tt.done, timeTestText: tt.text, yieldPct, estimatedSaleTax };
     }
   }
 
@@ -378,7 +336,6 @@ function recommendActions(properties, loans, today = new Date()) {
 // Export pro použití v ostatních skriptech (bez modulů, aby to fungovalo i přes file://).
 window.calc = {
   appreciatedValue,
-  portfolioTotals,
   calendarDiff,
   addYears,
   timeTestRemaining,
