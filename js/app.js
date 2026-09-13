@@ -880,6 +880,21 @@ function renderOverview() {
   document.getElementById('kpi-inflation-loss-label').textContent = isMonth ? 'Ztráta inflací (měsíc)' : 'Ztráta inflací (rok)';
   document.getElementById('kpi-real-appreciation-label').textContent = isMonth ? 'Zbývá po inflaci (měsíc)' : 'Zbývá po inflaci (rok)';
 
+  const breakdownEl = document.getElementById('kpi-cashflow-breakdown');
+  if (row.totalRent != null) {
+    const d = div;
+    const parts = [
+      `nájem +${fmtMoney(row.totalRent / d)}`,
+      `náklady -${fmtMoney(row.totalCosts / d)}`,
+      `úrok -${fmtMoney(row.totalInterest / d)}`,
+      `jistina -${fmtMoney(row.totalPrincipal / d)}`,
+      `daň -${fmtMoney(row.taxes / d)}`,
+    ];
+    breakdownEl.textContent = parts.join(' · ');
+  } else {
+    breakdownEl.textContent = '';
+  }
+
   const cashflowEl = document.getElementById('kpi-cashflow');
   cashflowEl.classList.toggle('text-red-600', (row.cashflow || 0) < 0);
   cashflowEl.classList.toggle('text-emerald-600', (row.cashflow || 0) >= 0);
