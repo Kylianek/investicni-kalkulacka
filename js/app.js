@@ -173,6 +173,7 @@ function init() {
   wireBackup();
   wireLienToggle();
   wireOverviewControls();
+  wireSettingsInputs();
   wireZeroClearsOnFocus();
   populateBankList();
   wireFormattedInputs();
@@ -447,14 +448,21 @@ function renderSettings() {
   setFormattedValue(document.getElementById('capgains-tax-input'), state.settings.capital_gains_tax_rate);
 }
 
-function submitSettingsForm(e) {
-  e.preventDefault();
-  state.settings.inflation_rate = parseFormNumber(document.getElementById('inflation-input').value) / 100;
-  state.settings.rental_tax_rate = parseFormNumber(document.getElementById('rental-tax-input').value);
-  state.settings.capital_gains_tax_rate = parseFormNumber(document.getElementById('capgains-tax-input').value);
-  saveState();
-  renderScenario();
-  renderOverview();
+function wireSettingsInputs() {
+  const inflationEl = document.getElementById('inflation-input');
+  const rentalTaxEl = document.getElementById('rental-tax-input');
+  const capGainsEl = document.getElementById('capgains-tax-input');
+  const save = () => {
+    state.settings.inflation_rate = parseFormNumber(inflationEl.value) / 100;
+    state.settings.rental_tax_rate = parseFormNumber(rentalTaxEl.value);
+    state.settings.capital_gains_tax_rate = parseFormNumber(capGainsEl.value);
+    saveState();
+    renderScenario();
+    renderOverview();
+  };
+  inflationEl.addEventListener('change', save);
+  rentalTaxEl.addEventListener('change', save);
+  capGainsEl.addEventListener('change', save);
 }
 
 /* ---------- SCÉNÁŘOVÉ UDÁLOSTI (celoportfoliové) ---------- */
@@ -847,7 +855,6 @@ function wireForms() {
   const forms = [
     ['property-form', submitPropertyForm],
     ['loan-form', submitLoanForm],
-    ['settings-form', submitSettingsForm],
     ['event-form', submitEventForm],
   ];
   for (const [id, handler] of forms) {
