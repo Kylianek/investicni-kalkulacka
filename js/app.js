@@ -24,7 +24,10 @@ const state = {
   settings: { inflation_rate: 0.03, rental_tax_rate: 15, capital_gains_tax_rate: 15 },
   scenario: { horizonYears: 20 },
   overview: { year: CURRENT_YEAR, period: 'year' },
+  freedom: { horizonYears: 10 },
 };
+
+let scenarioShowDetail = false;
 
 const fmtMoney = (n) =>
   (Number(n) || 0).toLocaleString('cs-CZ', { maximumFractionDigits: 0 }) + ' Kč';
@@ -124,6 +127,31 @@ function wireZeroClearsOnFocus() {
   });
 }
 
+/**
+ * Vlastní potvrzovací dialog místo nativního window.confirm() - spolehlivější
+ * napříč prohlížeči/mobilem (nativní confirm() se v některých kontextech umí
+ * chovat nespolehlivě). Vrací Promise<boolean>.
+ */
+function customConfirm(message) {
+  return new Promise((resolve) => {
+    const modal = document.getElementById('confirm-modal');
+    const okBtn = document.getElementById('confirm-modal-ok');
+    const cancelBtn = document.getElementById('confirm-modal-cancel');
+    document.getElementById('confirm-modal-text').textContent = message;
+    modal.classList.remove('hidden');
+    const cleanup = (result) => {
+      modal.classList.add('hidden');
+      okBtn.removeEventListener('click', onOk);
+      cancelBtn.removeEventListener('click', onCancel);
+      resolve(result);
+    };
+    const onOk = () => cleanup(true);
+    const onCancel = () => cleanup(false);
+    okBtn.addEventListener('click', onOk);
+    cancelBtn.addEventListener('click', onCancel);
+  });
+}
+
 function preventEnterSubmit(form) {
   form.addEventListener('keydown', (e) => {
     if (e.key !== 'Enter') return;
@@ -147,6 +175,7 @@ function loadState() {
     if (parsed.settings) Object.assign(state.settings, parsed.settings);
     if (parsed.scenario) Object.assign(state.scenario, parsed.scenario);
     if (parsed.overview) Object.assign(state.overview, parsed.overview);
+    if (parsed.freedom) Object.assign(state.freedom, parsed.freedom);
   } catch (e) {
     console.error('Nepodařilo se načíst uložená data:', e);
   }
@@ -160,6 +189,7 @@ function saveState() {
     settings: state.settings,
     scenario: state.scenario,
     overview: state.overview,
+    freedom: state.freedom,
   };
   localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
 }
@@ -179,12 +209,15 @@ function init() {
   wireFormattedInputs();
   syncLienFieldsVisibility();
   resetEventForm();
+  wireScenarioDetailToggle();
+  wireFreedomControls();
   document.getElementById('event-type').addEventListener('change', updateEventValueLabel);
   document.getElementById('scenario-horizon').addEventListener('input', (e) => {
     state.scenario.horizonYears = Math.max(1, Number(e.target.value) || 1);
     saveState();
     renderScenario();
     renderOverview();
+    renderFreedom();
   });
   renderAll();
 }
@@ -196,6 +229,7 @@ function renderAll() {
   renderEvents();
   renderScenario();
   renderOverview();
+  renderFreedom();
 }
 
 /* ---------- Tabs ---------- */
@@ -308,8 +342,8 @@ function resetPropertyForm() {
   document.getElementById('property-form-title').textContent = 'Přidat nemovitost';
 }
 
-function deleteProperty(id) {
-  if (!confirm('Opravdu smazat tuto nemovitost?')) return;
+async function deleteProperty(id) {
+  if (!(await customConfirm('Opravdu smazat tuto nemovitost?'))) return;
   state.properties = state.properties.filter((p) => p.id !== id);
   saveState();
   renderAll();
@@ -352,11 +386,21 @@ function submitPropertyForm(e) {
 
 /* ---------- MOJE ÚVĚRY ---------- */
 
+/** Poměr LTV (dluh/vlastní), pokud je zadaná hodnota nemovitosti při sjednání. */
+function ltvInfo(loan) {
+  const propValue = Number(loan.property_value_at_origination);
+  if (!propValue || propValue <= 0) return null;
+  const amount = Number(loan.amount) || 0;
+  const ltvPct = Math.round(Math.min(1, amount / propValue) * 100);
+  return { text: `${ltvPct}/${100 - ltvPct}`, ownAmount: Math.max(0, propValue - amount) };
+}
+
 function renderLoans() {
   const tbody = document.getElementById('loans-tbody');
   tbody.innerHTML = '';
   for (const l of state.loans) {
     const fx = l.start_date ? calc.fixationRemaining(new Date(l.start_date), l.fixation_years) : null;
+    const ltv = ltvInfo(l);
     const tr = document.createElement('tr');
     tr.className = 'border-b border-slate-200 dark:border-slate-700';
     tr.innerHTML = `
@@ -366,6 +410,8 @@ function renderLoans() {
       <td class="py-2 pr-3 text-right">${l.fixation_years} let</td>
       <td class="py-2 pr-3">${l.start_date || '—'}</td>
       <td class="py-2 pr-3">${fx ? fx.text : '—'}</td>
+      <td class="py-2 pr-3">${ltv ? ltv.text : '—'}</td>
+      <td class="py-2 pr-3 text-right">${ltv ? fmtMoney(ltv.ownAmount) : '—'}</td>
       <td class="py-2 pr-3">${escapeHtml(l.note || '')}</td>
       <td class="py-2 pr-3 whitespace-nowrap">
         <button class="text-blue-600 hover:underline mr-2" data-edit-loan="${l.id}">Upravit</button>
@@ -395,6 +441,7 @@ function fillLoanForm(id) {
   f.elements['term_years'].value = l.term_years || 30;
   f.elements['amortizing'].value = l.amortizing === false ? 'false' : 'true';
   setFormattedValue(f.elements['rate_after_fixation'], l.rate_after_fixation != null ? l.rate_after_fixation : '');
+  setFormattedValue(f.elements['property_value_at_origination'], l.property_value_at_origination || '');
   document.getElementById('loan-form-title').textContent = 'Upravit úvěr';
 }
 
@@ -405,8 +452,8 @@ function resetLoanForm() {
   document.getElementById('loan-form-title').textContent = 'Přidat úvěr';
 }
 
-function deleteLoan(id) {
-  if (!confirm('Opravdu smazat tento úvěr?')) return;
+async function deleteLoan(id) {
+  if (!(await customConfirm('Opravdu smazat tento úvěr?'))) return;
   state.loans = state.loans.filter((l) => l.id !== id);
   saveState();
   renderAll();
@@ -417,6 +464,7 @@ function submitLoanForm(e) {
   const f = e.target;
   const id = f.elements['id'].value;
   const rateAfterRaw = f.elements['rate_after_fixation'].value.trim();
+  const propValueRaw = f.elements['property_value_at_origination'].value.trim();
   const payload = {
     id: id || uid(),
     bank: f.elements['bank'].value.trim(),
@@ -428,6 +476,7 @@ function submitLoanForm(e) {
     term_years: Number(f.elements['term_years'].value) || 30,
     amortizing: f.elements['amortizing'].value !== 'false',
     rate_after_fixation: rateAfterRaw ? parseFormNumber(rateAfterRaw) : null,
+    property_value_at_origination: propValueRaw ? parseFormNumber(propValueRaw) : null,
   };
   if (id) {
     const idx = state.loans.findIndex((l) => l.id === id);
@@ -459,6 +508,7 @@ function wireSettingsInputs() {
     saveState();
     renderScenario();
     renderOverview();
+    renderFreedom();
   };
   inflationEl.addEventListener('change', save);
   rentalTaxEl.addEventListener('change', save);
@@ -532,13 +582,14 @@ function resetEventForm() {
   document.getElementById('event-form-title').textContent = 'Přidat scénářovou událost';
 }
 
-function deleteEvent(id) {
-  if (!confirm('Smazat tuto scénářovou událost?')) return;
+async function deleteEvent(id) {
+  if (!(await customConfirm('Smazat tuto scénářovou událost?'))) return;
   state.events = state.events.filter((e) => e.id !== id);
   saveState();
   renderEvents();
   renderScenario();
   renderOverview();
+  renderFreedom();
 }
 
 function submitEventForm(e) {
@@ -566,6 +617,7 @@ function submitEventForm(e) {
   renderEvents();
   renderScenario();
   renderOverview();
+  renderFreedom();
 }
 
 /* ---------- SCÉNÁŘE (predikce) ---------- */
@@ -599,20 +651,37 @@ function renderScenario() {
     { label: 'Vlastní kapitál', color: '#16a34a', points: rows.map((r) => ({ x: r.year, y: r.equity })) },
   ]);
 
+  const detailCell = (v) => `<td class="py-1.5 pr-3 text-right scenario-detail-col ${scenarioShowDetail ? '' : 'hidden'}">${v == null ? '—' : fmtMoney(v)}</td>`;
+
   const tbody = document.getElementById('scenario-tbody');
   tbody.innerHTML = '';
   for (const r of rows) {
     const tr = document.createElement('tr');
-    tr.className = 'border-b border-slate-200';
+    tr.className = 'border-b border-slate-200' + (r.depreciationExhausted ? ' bg-orange-50' : '');
     tr.innerHTML = `
       <td class="py-1.5 pr-3">${r.year}</td>
       <td class="py-1.5 pr-3 text-right">${fmtMoney(r.totalValue)}</td>
       <td class="py-1.5 pr-3 text-right">${fmtMoney(r.totalDebt)}</td>
       <td class="py-1.5 pr-3 text-right font-medium">${fmtMoney(r.equity)}</td>
+      ${detailCell(r.totalRent)}
+      ${detailCell(r.totalCosts)}
+      ${detailCell(r.totalInterest)}
+      ${detailCell(r.totalPrincipal)}
+      ${detailCell(r.totalDepreciation)}
+      ${detailCell(r.taxes)}
       <td class="py-1.5 pr-3 text-right ${r.cashflow < 0 ? 'text-red-600' : ''}">${r.cashflow === null ? '—' : fmtMoney(r.cashflow)}</td>
       <td class="py-1.5 pr-3 text-right">${fmtMoney(r.cumulativeCashflow)}</td>`;
     tbody.appendChild(tr);
   }
+}
+
+function wireScenarioDetailToggle() {
+  const btn = document.getElementById('scenario-detail-toggle');
+  btn.addEventListener('click', () => {
+    scenarioShowDetail = !scenarioShowDetail;
+    btn.textContent = scenarioShowDetail ? 'Skrýt detail' : 'Zobrazit detail (nájem, náklady, úrok, odpisy...)';
+    document.querySelectorAll('.scenario-detail-col').forEach((el) => el.classList.toggle('hidden', !scenarioShowDetail));
+  });
 }
 
 function fmtCompact(n) {
@@ -665,6 +734,84 @@ function buildLineChartSVG(seriesList, { width = 900, height = 280, padding = 46
     ${pathsSvg}
     ${xTicksSvg}
   </svg>`;
+}
+
+/* ---------- OSVOBOZENÍ OD DLUHU ---------- */
+
+function wireFreedomControls() {
+  const horizonInput = document.getElementById('freedom-horizon');
+  horizonInput.value = state.freedom.horizonYears;
+  horizonInput.addEventListener('input', () => {
+    state.freedom.horizonYears = Math.max(1, Number(horizonInput.value) || 1);
+    saveState();
+    renderFreedom();
+  });
+}
+
+function pluralYears(n) {
+  if (n === 1) return 'rok';
+  if (n >= 2 && n <= 4) return 'roky';
+  return 'let';
+}
+
+function renderFreedom() {
+  const horizon = state.freedom.horizonYears;
+  document.getElementById('freedom-horizon').value = horizon;
+
+  const plan = calc.simulateDebtFreedomPlan({
+    properties: state.properties,
+    loans: state.loans,
+    settings: state.settings,
+    horizonYears: horizon,
+    startYear: CURRENT_YEAR,
+  });
+
+  const banner = document.getElementById('freedom-result-banner');
+  const totalDebtToday = state.loans.reduce((s, l) => s + (Number(l.amount) || 0), 0);
+  if (totalDebtToday <= 0) {
+    banner.className = 'rounded-xl border p-4 mb-6 bg-emerald-50 border-emerald-300';
+    banner.innerHTML = '<p class="font-semibold text-emerald-800">Portfolio už teď nemá žádný dluh.</p>';
+  } else if (plan.debtFreeYear !== null) {
+    const yearsToFree = plan.debtFreeYear - CURRENT_YEAR;
+    banner.className = 'rounded-xl border p-4 mb-6 bg-emerald-50 border-emerald-300';
+    banner.innerHTML = `<p class="font-semibold text-emerald-800">Celé portfolio bez dluhu od roku ${plan.debtFreeYear} (za ${yearsToFree} ${pluralYears(yearsToFree)}).</p>`;
+  } else {
+    banner.className = 'rounded-xl border p-4 mb-6 bg-amber-50 border-amber-300';
+    banner.innerHTML = `<p class="font-semibold text-amber-800">V horizontu ${horizon} let se nepodaří dluh celý splatit prodejem nemovitostí ve vlastnictví - zkus delší horizont, nebo přidej další nemovitosti.</p>`;
+  }
+
+  const eventsEl = document.getElementById('freedom-events');
+  if (!plan.events.length) {
+    eventsEl.innerHTML = '<p class="text-slate-500">V tomhle horizontu není potřeba nic prodávat.</p>';
+  } else {
+    eventsEl.innerHTML = plan.events
+      .map(
+        (e) => `
+      <div class="border-l-4 border-blue-400 pl-3">
+        <p class="font-medium text-slate-800">${e.year}: prodej "${escapeHtml(e.propertyName)}"</p>
+        <p class="text-xs text-slate-500">
+          Výtěžek ${fmtMoney(e.saleProceeds)}
+          (${e.taxExempt ? 'bez daně z příjmu - časový test splněn' : 'po odhadované dani ' + fmtMoney(e.estimatedSaleTax)}) -
+          ${e.loanFullyCleared ? 'veškerý zbývající dluh tím byl toho roku splacen.' : 'použito na částečné splacení dluhu, hotovost ' + fmtMoney(e.cashAfter) + ' zůstává na další splátky.'}
+        </p>
+      </div>`
+      )
+      .join('');
+  }
+
+  const tbody = document.getElementById('freedom-tbody');
+  tbody.innerHTML = '';
+  for (const r of plan.rows) {
+    const tr = document.createElement('tr');
+    tr.className = 'border-b border-slate-200' + (r.soldThisYear ? ' bg-blue-50' : '');
+    tr.innerHTML = `
+      <td class="py-1.5 pr-3">${r.year}</td>
+      <td class="py-1.5 pr-3 text-right ${r.totalDebt <= 0 ? 'text-emerald-600 font-medium' : ''}">${fmtMoney(r.totalDebt)}</td>
+      <td class="py-1.5 pr-3 text-right">${fmtMoney(r.activeValue)}</td>
+      <td class="py-1.5 pr-3 text-right">${fmtMoney(r.cash)}</td>
+      <td class="py-1.5 pr-3">${r.soldThisYear ? 'Prodej: ' + escapeHtml(r.soldThisYear.propertyName) : ''}</td>`;
+    tbody.appendChild(tr);
+  }
 }
 
 /* ---------- PŘEHLED (konkrétní rok / měsíc + doporučení) ---------- */
@@ -786,6 +933,7 @@ function exportBackup() {
     settings: state.settings,
     scenario: state.scenario,
     overview: state.overview,
+    freedom: state.freedom,
     exported_at: new Date().toISOString(),
   };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
@@ -803,10 +951,10 @@ function importBackup(e) {
   const file = e.target.files[0];
   if (!file) return;
   const reader = new FileReader();
-  reader.onload = () => {
+  reader.onload = async () => {
     try {
       const parsed = JSON.parse(reader.result);
-      if (!confirm('Nahrání zálohy přepíše aktuální data v tomto prohlížeči. Pokračovat?')) return;
+      if (!(await customConfirm('Nahrání zálohy přepíše aktuální data v tomto prohlížeči. Pokračovat?'))) return;
       state.properties = Array.isArray(parsed.properties) ? parsed.properties : [];
       state.loans = Array.isArray(parsed.loans) ? parsed.loans : [];
       state.events = Array.isArray(parsed.events) ? parsed.events : [];
@@ -819,6 +967,9 @@ function importBackup(e) {
       state.overview = parsed.overview && typeof parsed.overview.year === 'number'
         ? parsed.overview
         : { year: CURRENT_YEAR, period: 'year' };
+      state.freedom = parsed.freedom && typeof parsed.freedom.horizonYears === 'number'
+        ? parsed.freedom
+        : { horizonYears: 10 };
       saveState();
       renderAll();
       alert('Záloha byla úspěšně nahrána.');
@@ -831,14 +982,15 @@ function importBackup(e) {
   reader.readAsText(file);
 }
 
-function clearAllData() {
-  if (!confirm('Opravdu smazat všechna data v tomto prohlížeči? Tuto akci nelze vrátit zpět.')) return;
+async function clearAllData() {
+  if (!(await customConfirm('Opravdu smazat všechna data v tomto prohlížeči? Tuto akci nelze vrátit zpět.'))) return;
   state.properties = [];
   state.loans = [];
   state.events = [];
   state.settings = { inflation_rate: 0.03, rental_tax_rate: 15, capital_gains_tax_rate: 15 };
   state.scenario = { horizonYears: 20 };
   state.overview = { year: CURRENT_YEAR, period: 'year' };
+  state.freedom = { horizonYears: 10 };
   saveState();
   renderAll();
 }
