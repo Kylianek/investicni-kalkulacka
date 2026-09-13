@@ -200,7 +200,11 @@ function projectPortfolio({ properties, loans, settings, events, horizonYears, s
     curValue[p.id] = Number(p.market_value) || 0;
     curRent[p.id] = Number(p.rent) || 0;
     curCost[p.id] = (Number(p.monthly_costs) || 0) * 12;
-    depRemaining[p.id] = depreciationBase(p);
+    // Odpis běží od skutečného data pořízení, ne od dneška - roky vlastnictví
+    // před "dneškem" (startYear) se odečtou hned na začátku.
+    const yearsAlreadyOwned = Math.max(0, startYear - yearOf(p.acquisition_date, startYear));
+    const alreadyDepreciated = (depreciationBase(p) / DEPRECIATION_YEARS) * yearsAlreadyOwned;
+    depRemaining[p.id] = Math.max(0, depreciationBase(p) - alreadyDepreciated);
   }
 
   let cashReserve = 0;
