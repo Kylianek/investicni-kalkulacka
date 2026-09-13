@@ -407,6 +407,7 @@ function renderLoans() {
       <td class="py-2 pr-3 font-medium">${escapeHtml(l.bank)}</td>
       <td class="py-2 pr-3 text-right">${fmtMoney(l.amount)}</td>
       <td class="py-2 pr-3 text-right">${fmtPercent(l.interest_rate)}</td>
+      <td class="py-2 pr-3 text-right">${fmtMoney(l.monthly_payment)}</td>
       <td class="py-2 pr-3 text-right">${l.fixation_years} let</td>
       <td class="py-2 pr-3">${l.start_date || '—'}</td>
       <td class="py-2 pr-3">${fx ? fx.text : '—'}</td>
@@ -435,11 +436,10 @@ function fillLoanForm(id) {
   f.elements['bank'].value = l.bank;
   setFormattedValue(f.elements['amount'], l.amount);
   setFormattedValue(f.elements['interest_rate'], l.interest_rate * 100);
+  setFormattedValue(f.elements['monthly_payment'], l.monthly_payment || '');
   f.elements['fixation_years'].value = l.fixation_years;
   f.elements['start_date'].value = l.start_date || '';
   f.elements['note'].value = l.note || '';
-  f.elements['term_years'].value = l.term_years || 30;
-  f.elements['amortizing'].value = l.amortizing === false ? 'false' : 'true';
   setFormattedValue(f.elements['rate_after_fixation'], l.rate_after_fixation != null ? l.rate_after_fixation : '');
   setFormattedValue(f.elements['property_value_at_origination'], l.property_value_at_origination || '');
   document.getElementById('loan-form-title').textContent = 'Upravit úvěr';
@@ -470,11 +470,10 @@ function submitLoanForm(e) {
     bank: f.elements['bank'].value.trim(),
     amount: parseFormNumber(f.elements['amount'].value),
     interest_rate: parseFormNumber(f.elements['interest_rate'].value) / 100,
+    monthly_payment: parseFormNumber(f.elements['monthly_payment'].value),
     fixation_years: Number(f.elements['fixation_years'].value) || 5,
     start_date: f.elements['start_date'].value || null,
     note: f.elements['note'].value.trim() || null,
-    term_years: Number(f.elements['term_years'].value) || 30,
-    amortizing: f.elements['amortizing'].value !== 'false',
     rate_after_fixation: rateAfterRaw ? parseFormNumber(rateAfterRaw) : null,
     property_value_at_origination: propValueRaw ? parseFormNumber(propValueRaw) : null,
   };

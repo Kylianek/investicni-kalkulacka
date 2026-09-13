@@ -70,14 +70,6 @@ function fixationRemaining(startDate, fixationYears, today = new Date()) {
  * Přehled i Scénáře čerpají ze stejné funkce - Přehled si jen vybere jeden rok.
  * ========================================================================= */
 
-/** Měsíční anuitní splátka z jistiny, měsíční sazby a počtu měsíců. */
-function annuityPayment(principal, monthlyRate, months) {
-  if (months <= 0 || principal <= 0) return 0;
-  if (monthlyRate === 0) return principal / months;
-  const f = Math.pow(1 + monthlyRate, months);
-  return (principal * monthlyRate * f) / (f - 1);
-}
-
 function yearOf(dateStr, fallbackYear) {
   if (!dateStr) return fallbackYear;
   const d = new Date(dateStr);
@@ -117,6 +109,13 @@ function loanRateForYear(loan, loanStartYear, year) {
  * Umoří jeden úvěr o jeden rok (ze stateYear do stateYear+1). Mutuje `ls.remainingPrincipal`.
  * Vrací { interest, principal } zaplacené za ten rok. Sdílené mezi projectPortfolio
  * a simulateDebtFreedomPlan, aby obě počítaly úvěry naprosto stejně.
+ *
+ * Měsíční splátka se NEDOPOČÍTÁVÁ z doby splatnosti - zadává ji přímo uživatel
+ * (loan.monthly_payment), protože tu skutečnou hodnotu zná z bankovního
+ * výpisu přesněji, než by ji uhodl libovolný anuitní vzorec. Z ní se pak
+ * každý měsíc odvodí úrok (zbývající jistina × měsíční sazba) a jistina
+ * (splátka − úrok); pokud splátka nepokryje ani úrok, jistina se toho měsíce
+ * nehýbe (žádné záporné umořování).
  */
 function amortizeLoanForYear(loan, ls, stateYear, startYear) {
   let interest = 0;
@@ -125,28 +124,20 @@ function amortizeLoanForYear(loan, ls, stateYear, startYear) {
     const targetYear = stateYear + 1;
     const rate = loanRateForYear(loan, ls.startYear, targetYear);
     const monthlyRate = rate / 12;
-    const termBaseYear = Math.max(ls.startYear, startYear);
-    const elapsedMonths = Math.max((stateYear - termBaseYear) * 12, 0);
-    const totalMonths = (Number(loan.term_years) || 30) * 12;
-    const remainingMonths = Math.max(totalMonths - elapsedMonths, 0);
+    const monthlyPayment = Number(loan.monthly_payment) || 0;
 
-    if (loan.amortizing === false) {
-      interest = ls.remainingPrincipal * rate;
-    } else if (remainingMonths > 0) {
-      const monthsThisYear = Math.min(12, remainingMonths);
-      const payment = annuityPayment(ls.remainingPrincipal, monthlyRate, remainingMonths);
-      let principalLeft = ls.remainingPrincipal;
-      for (let m = 0; m < monthsThisYear; m++) {
-        const interestM = principalLeft * monthlyRate;
-        let principalM = payment - interestM;
-        if (principalM > principalLeft) principalM = principalLeft;
-        if (principalM < 0) principalM = 0;
-        principalLeft -= principalM;
-        interest += interestM;
-        principal += principalM;
-      }
-      ls.remainingPrincipal = Math.max(principalLeft, 0);
+    let principalLeft = ls.remainingPrincipal;
+    for (let m = 0; m < 12; m++) {
+      if (principalLeft <= 0) break;
+      const interestM = principalLeft * monthlyRate;
+      let principalM = monthlyPayment - interestM;
+      if (principalM > principalLeft) principalM = principalLeft;
+      if (principalM < 0) principalM = 0;
+      principalLeft -= principalM;
+      interest += interestM;
+      principal += principalM;
     }
+    ls.remainingPrincipal = Math.max(principalLeft, 0);
   }
   return { interest, principal };
 }
@@ -513,7 +504,6 @@ window.calc = {
   addYears,
   timeTestRemaining,
   fixationRemaining,
-  annuityPayment,
   resolvePortfolioOverride,
   resolvePortfolioRate,
   loanRateForYear,

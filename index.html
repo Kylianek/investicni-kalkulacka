@@ -200,6 +200,10 @@
             <label class="flex flex-col gap-1">Úrok (%)
               <input name="interest_rate" data-unit="percent" class="input" />
             </label>
+            <label class="flex flex-col gap-1">Měsíční splátka (Kč)
+              <input name="monthly_payment" data-unit="money" class="input" />
+              <span class="text-xs text-slate-400">skutečná splátka z tvého úvěru - podle ní se dopočítá úrok/jistina, ne naopak</span>
+            </label>
             <label class="flex flex-col gap-1">Doba fixace (roky)
               <input name="fixation_years" type="number" step="1" min="0" class="input" />
             </label>
@@ -210,24 +214,10 @@
               <input name="note" class="input" />
             </label>
 
-            <details class="col-span-full border-t border-slate-200 pt-3 mt-1">
-              <summary class="cursor-pointer text-sm font-medium text-slate-600">Predikce (pro záložku Scénáře)</summary>
-              <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
-                <label class="flex flex-col gap-1">Zbývající splatnost od dneška (roky)
-                  <input name="term_years" type="number" step="1" min="1" value="30" class="input" />
-                </label>
-                <label class="flex flex-col gap-1">Typ splácení
-                  <select name="amortizing" class="input">
-                    <option value="true" selected>Anuitní (jistina se snižuje)</option>
-                    <option value="false">Jen úroky (jistina se nemění)</option>
-                  </select>
-                </label>
-                <label class="flex flex-col gap-1">Sazba po konci fixace (%, odhad)
-                  <input name="rate_after_fixation" data-unit="percent" placeholder="prázdné = stejná jako teď" class="input" />
-                </label>
-              </div>
-            </details>
-
+            <label class="flex flex-col gap-1">Sazba po konci fixace (%, odhad)
+              <input name="rate_after_fixation" data-unit="percent" placeholder="prázdné = stejná jako teď" class="input" />
+              <span class="text-xs text-slate-400">po skončení fixace se skutečná splátka u banky obvykle přepočítá - až budeš znát novou, uprav ji tu</span>
+            </label>
             <label class="flex flex-col gap-1">Hodnota nemovitosti při sjednání (Kč)
               <input name="property_value_at_origination" data-unit="money" placeholder="volitelné - pro poměr LTV" class="input" />
             </label>
@@ -246,6 +236,7 @@
                 <th class="py-2 pr-3">Banka</th>
                 <th class="py-2 pr-3 text-right">Výše úvěru</th>
                 <th class="py-2 pr-3 text-right">Úrok</th>
+                <th class="py-2 pr-3 text-right">Splátka</th>
                 <th class="py-2 pr-3 text-right">Fixace</th>
                 <th class="py-2 pr-3">Od</th>
                 <th class="py-2 pr-3">Zbývá fixace</th>
