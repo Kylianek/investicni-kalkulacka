@@ -263,7 +263,12 @@ function projectPortfolio({ properties, loans, settings, events, horizonYears, s
           const ratePct = resolveOverride(events, 'interest_rate', year, { type: 'loan', id: loan.id });
           const rate = (ratePct === undefined ? baseRatePct : ratePct) / 100;
           const monthlyRate = rate / 12;
-          const elapsedMonths = (year - ls.startYear) * 12;
+          // "term_years" = zbývající doba splatnosti OD DNEŠKA (startYear) pro už běžící
+          // úvěry (amount = dnešní zůstatek jistiny). Pro úvěr začínající až v budoucnu
+          // (start_date > dnešek) se počítá od jeho vlastního startu (amount = jistina
+          // při sjednání).
+          const termBaseYear = Math.max(ls.startYear, startYear);
+          const elapsedMonths = Math.max((year - termBaseYear) * 12, 0);
           const totalMonths = (Number(loan.term_years) || 30) * 12;
           const remainingMonths = Math.max(totalMonths - elapsedMonths, 0);
 
