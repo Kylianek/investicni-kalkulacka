@@ -413,16 +413,19 @@
             </label>
           </div>
           <p class="text-xs text-slate-500">
-            Strategie: každý rok se nejdřív použije volná hotovost (z dřívějších prodejů) na doplacení
-            úvěru s nejvyšší sazbou. Pokud dluh zbývá a hotovost nestačí, <strong>ale jen pokud se to
-            vyplatí</strong> - zbývající dluh musí činit aspoň 20 % hodnoty nejlevnější dostupné
-            nemovitosti, jinak se neprodává (peníze z portfolia lze získat jen prodejem CELÉ nemovitosti,
-            ne "utržením" pár desítek tisíc; a protože se ten práh počítá z aktuální, už zhodnocené ceny
-            nemovitostí, roste každý rok spolu s tím, jak dražší bude i náhradní nemovitost stejné
-            kvality) - prodá se ta nemovitost, která v kartě <strong>Doporučení</strong> vychází jako
-            nejvhodnější (vysoké zhodnocení, ideálně po časovém testu, slabý provozní výnos). Výtěžek jde
-            na splacení nejnevýhodnějšího úvěru, zbytek se počítá jako hotovost/vlastní kapitál. Přesně
-            princip "portfolio naroste, prodám byt, splatím úvěr, tím uvolním víc majetku".
+            Strategie: peníze z portfolia lze získat jen prodejem CELÉ nemovitosti (žádná nestojí pár
+            desítek tisíc), takže o prodeji nerozhoduje výše dluhu, ale to, <strong>kolik už vydělalo
+            samotné zhodnocení</strong>. Appka sčítá, o kolik od posledního prodeje narostla hodnota
+            nemovitostí, a jakmile ten součet dosáhne ceny aspoň nejlevnější dostupné nemovitosti (např.
+            portfolio 100 mil. Kč při 5 % ročně vydělá 5 mil. Kč/rok zhodnocením - to už je částka, za
+            kterou reálně jde byt prodat), prodá se ta nejvhodnější (stejné bodování jako v kartě
+            <strong>Doporučení</strong>: vysoké zhodnocení, ideálně po časovém testu, slabý provozní
+            výnos) a výtěžek splatí nejnevýhodnější úvěr - zbytek se počítá jako hotovost/vlastní kapitál
+            a počítadlo zhodnocení začíná znovu od nuly. Protože se srovnává s aktuální (už zhodnocenou)
+            cenou nemovitostí, roste ta laťka sama každý rok, stejně jako dražší bude i náhradní
+            nemovitost stejné kvality. Volná hotovost z dřívějších prodejů se navíc každý rok nejdřív
+            použije na doplacení úvěru s nejvyšší sazbou. Přesně princip "portfolio naroste, prodám byt,
+            splatím úvěr, tím uvolním víc majetku".
           </p>
         </div>
 
@@ -442,6 +445,7 @@
                 <th class="py-2 pr-3 text-right">Zbývající dluh</th>
                 <th class="py-2 pr-3 text-right">Hodnota nemovitostí</th>
                 <th class="py-2 pr-3 text-right">Volná hotovost</th>
+                <th class="py-2 pr-3 text-right">Nashromážděné zhodnocení</th>
                 <th class="py-2 pr-3">Událost</th>
               </tr>
             </thead>

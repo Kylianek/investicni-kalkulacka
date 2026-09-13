@@ -392,14 +392,6 @@ function recommendActions(properties, loans, settings, today = new Date()) {
 }
 
 /**
- * Prodej nemovitosti se v plánu osvobození vyplatí, jen když zbývající dluh
- * činí aspoň tuhle část hodnoty nejlevnější dostupné nemovitosti - nejde
- * "utrhnout" z portfolia pár desítek tisíc, peníze lze získat jen prodejem
- * celé nemovitosti, a ta žádná nestojí málo. Viz simulateDebtFreedomPlan.
- */
-const MIN_SALE_FRACTION = 0.2;
-
-/**
  * Splatí co nejvíc zbývajícího dluhu z dostupné hotovosti, vždy nejdřív ten
  * úvěr s nejvyšší aktuální sazbou (a případný zbytek hotovosti přeteče do
  * dalšího v pořadí). Mutuje loanState. Vrací hotovost, která po splacení
@@ -423,10 +415,19 @@ function payDownDebtWithCash(loans, loanState, stateYear, cashAvailable) {
 /**
  * Plán "osvobození" portfolia od dluhu: každý rok nemovitosti rostou a úvěry
  * se přirozeně umořují (stejně jako v projectPortfolio). Jakákoliv volná
- * hotovost (z předchozích prodejů) se PRVNÍ vždy použije na doplacení dluhu -
- * teprve když to nestačí, simulace prodá NEJLEPŠÍHO kandidáta (stejné
- * bodování jako v kartě Doporučení: vysoké zhodnocení, ideálně po časovém
- * testu, slabý výnos) a výtěžek z prodeje jde do stejné hotovostní rezervy.
+ * hotovost (z předchozích prodejů) se PRVNÍ vždy použije na doplacení dluhu.
+ *
+ * Kdy se prodává: NE podle toho, kolik dluhu zbývá (dluh může být cokoliv -
+ * klidně malý), ale podle toho, kolik peněz už samotné ZHODNOCENÍ portfolia
+ * od posledního prodeje vydělalo. Peníze se z portfolia dají získat jedině
+ * prodejem CELÉ nemovitosti (žádná nestojí pár desítek tisíc) - takže se čeká,
+ * dokud nashromážděné zhodnocení nedosáhne hodnoty aspoň nejlevnější dostupné
+ * nemovitosti (typicky "kolik by stála náhrada"), a pak se ta nejvhodnější
+ * (stejné bodování jako v kartě Doporučení) prodá, výtěžek splatí dluh a
+ * počítadlo zhodnocení se vynuluje. Protože se srovnává s AKTUÁLNÍ (už
+ * zhodnocenou) cenou nemovitostí, roste ta laťka rok od roku sama - přesně
+ * jak dražší budou časem i náhradní nemovitosti stejné kvality.
+ *
  * Vrací { rows, events, debtFreeYear } - debtFreeYear je null, pokud se dluh
  * nepodaří do horizontu vynulovat.
  */
@@ -447,6 +448,7 @@ function simulateDebtFreedomPlan({ properties, loans, settings, horizonYears, st
   const saleEvents = [];
   let debtFreeYear = null;
   let cash = 0;
+  let cumulativeGain = 0; // zhodnocení portfolia nashromážděné od posledního prodeje
 
   for (let k = 0; k <= horizonYears; k++) {
     const stateYear = startYear + k;
@@ -456,7 +458,9 @@ function simulateDebtFreedomPlan({ properties, loans, settings, horizonYears, st
       for (const l of loans) amortizeLoanForYear(l, loanState[l.id], stateYear - 1, startYear);
       for (const ps of propState) {
         if (ps.sold) continue;
+        const before = curValue[ps.property.id];
         curValue[ps.property.id] *= 1 + (Number(ps.property.growth_rate) || 0);
+        cumulativeGain += curValue[ps.property.id] - before;
       }
     }
 
@@ -467,16 +471,9 @@ function simulateDebtFreedomPlan({ properties, loans, settings, horizonYears, st
     let soldThisYear = null;
     const unsold = propState.filter((ps) => !ps.sold);
 
-    // Prodej se vyplatí jen tehdy, když zbývající dluh stojí aspoň za tu
-    // námahu prodat celou (nejlevnější dostupnou) nemovitost - nejde "utrhnout"
-    // z portfolia jen pár desítek tisíc, peníze se z něj dají získat JEN
-    // prodejem celé nemovitosti. Práh (MIN_SALE_FRACTION z ceny nejlevnější
-    // nemovitosti) roste každý rok spolu s tím, jak nemovitosti zdražují -
-    // časem tak potřebuješ vydělat "víc", aby se prodej vyplatil, protože
-    // náhradní nemovitost stejné kvality bude taky dražší.
     if (totalDebt > 0.01 && unsold.length) {
       const cheapestValue = Math.min(...unsold.map((ps) => curValue[ps.property.id]));
-      const worthSelling = totalDebt >= cheapestValue * MIN_SALE_FRACTION;
+      const worthSelling = cumulativeGain >= cheapestValue;
 
       if (worthSelling) {
         const candidates = unsold
@@ -495,14 +492,16 @@ function simulateDebtFreedomPlan({ properties, loans, settings, horizonYears, st
           saleProceeds: chosen.netProceeds,
           estimatedSaleTax: chosen.estimatedSaleTax,
           taxExempt: chosen.taxExempt,
+          triggeredByGain: cumulativeGain,
           loanFullyCleared: totalDebt <= 0.01,
           cashAfter: cash,
         };
         saleEvents.push({ year: stateYear, ...soldThisYear });
+        cumulativeGain = 0;
       }
     }
 
-    rows.push({ year: stateYear, totalDebt, activeValue, cash, soldThisYear });
+    rows.push({ year: stateYear, totalDebt, activeValue, cash, cumulativeGain, soldThisYear });
 
     if (totalDebt <= 0.01) {
       debtFreeYear = stateYear;

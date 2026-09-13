@@ -803,6 +803,7 @@ function renderFreedom() {
       <div class="border-l-4 border-blue-400 pl-3">
         <p class="font-medium text-slate-800">${e.year}: prodej "${escapeHtml(e.propertyName)}"</p>
         <p class="text-xs text-slate-500">
+          Spuštěno tím, že zhodnocení portfolia od posledního prodeje narostlo na ${fmtMoney(e.triggeredByGain)} - dost na to, aby se prodej vyplatil.
           Výtěžek ${fmtMoney(e.saleProceeds)}
           (${e.taxExempt ? 'bez daně z příjmu - časový test splněn' : 'po odhadované dani ' + fmtMoney(e.estimatedSaleTax)}) -
           ${e.loanFullyCleared ? 'veškerý zbývající dluh tím byl toho roku splacen.' : 'použito na částečné splacení dluhu, hotovost ' + fmtMoney(e.cashAfter) + ' zůstává na další splátky.'}
@@ -822,6 +823,7 @@ function renderFreedom() {
       <td class="py-1.5 pr-3 text-right ${r.totalDebt <= 0 ? 'text-emerald-600 font-medium' : ''}">${fmtMoney(r.totalDebt)}</td>
       <td class="py-1.5 pr-3 text-right">${fmtMoney(r.activeValue)}</td>
       <td class="py-1.5 pr-3 text-right">${fmtMoney(r.cash)}</td>
+      <td class="py-1.5 pr-3 text-right">${fmtMoney(r.cumulativeGain)}</td>
       <td class="py-1.5 pr-3">${r.soldThisYear ? 'Prodej: ' + escapeHtml(r.soldThisYear.propertyName) : ''}</td>`;
     tbody.appendChild(tr);
   }
