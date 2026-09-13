@@ -34,6 +34,38 @@ tlačítko na stažení/nahrání zálohy (JSON soubor).
 Všechny vzorce jsou v [js/calc.js](js/calc.js) jako čisté funkce (ověřené na skutečných
 číslech z originálního souboru — souhlasí do koruny).
 
+## Záložka Scénáře (predikce na X let dopředu)
+
+Nad rámec originálního Excelu přidává aplikace záložku **Scénáře**, která simuluje vývoj
+portfolia rok po roce, ne jen jeden rok dopředu:
+
+- Hodnota nemovitosti a nájem rostou **skládaně** (rok po roce), ne jen jednorázově.
+- Úvěr se **reálně umořuje** — anuitní splátka se každý rok rozpadá na úrok a jistinu
+  podle zbývající jistiny, sazby a doby splatnosti (nastavuje se v pokročilé sekci
+  formuláře úvěru). Po konci fixace se použije zadaná "sazba po fixaci".
+- Každá nemovitost může mít **neobsazenost (%)**, **provozní náklady (Kč/měs)** a
+  vlastní **růst nájmu** — to všechno snižuje reálný cashflow, ne jen nominální nájem.
+- Nemovitost lze **navázat na konkrétní úvěr** (pole "Navázaný úvěr"), aby šlo počítat
+  vlastní kapitál (equity) skutečně za tu nemovitost, ne jen za celé portfolio.
+- Nemovitost může mít nastavený **plánovaný rok prodeje** — simulace pak k tomu roku
+  spočítá čistý výnos z prodeje (cena − zbývající dluh − daň z prodeje, pokud ještě
+  neuplynul časový test) a přesune ho do hotovostní rezervy portfolia.
+- **Scénářové události** umožňují dočasně přepsat libovolnou sazbu na určité období,
+  pro konkrétní nemovitost/úvěr nebo pro celé portfolio, např.:
+  - *"roky 2031-2036: úrok úvěru X klesne na 3 %"* (typ "Úroková sazba úvěru")
+  - *"rok 2029: neobsazenost 50 %"* (výpadek nájemníka na půl roku) (typ "Neobsazenost")
+  - *"roky 2027-2029: nižší růst hodnoty (recese)"* (typ "Růst hodnoty nemovitosti", cíl "Celé portfolio")
+  - *"rok 2030: jednorázový výdaj -500 000 Kč"* (rekonstrukce) (typ "Jednorázový příjem/výdaj")
+
+  Když se pro stejný rok překrývá událost pro konkrétní nemovitost/úvěr a událost pro
+  celé portfolio, vyhrává ta konkrétnější.
+- Výstup: graf a tabulka vývoje majetku/dluhu/vlastního kapitálu po letech, plus
+  souhrnné KPI (vlastní kapitál za N let, kumulovaný cashflow, průměrný roční růst).
+
+V **Nastavení** lze nastavit i orientační daň z příjmu z pronájmu a daň z prodeje
+nemovitosti (uplatní se jen při prodeji před koncem časového testu) — jde o zjednodušení
+pro účely predikce, ne o daňové poradenství.
+
 ## Lokální vyzkoušení
 
 Stačí otevřít `index.html` přímo v prohlížeči (dvojklikem), nebo spustit jednoduchý
