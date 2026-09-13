@@ -44,42 +44,59 @@
         </div>
 
         <div class="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
-          <div class="kpi-card">
+          <div class="kpi-card kpi-clickable" data-formula-for="assets">
             <div class="kpi-label">Majetek (tržní hodnota)</div>
             <div id="kpi-assets" class="kpi-value">—</div>
+            <div class="kpi-formula-hint">Jak to počítám? ▸</div>
+            <div id="kpi-assets-formula" class="kpi-formula hidden"></div>
           </div>
-          <div class="kpi-card">
+          <div class="kpi-card kpi-clickable" data-formula-for="debt">
             <div class="kpi-label">Dluh</div>
             <div id="kpi-debt" class="kpi-value">—</div>
+            <div class="kpi-formula-hint">Jak to počítám? ▸</div>
+            <div id="kpi-debt-formula" class="kpi-formula hidden"></div>
           </div>
-          <div class="kpi-card">
+          <div class="kpi-card kpi-clickable" data-formula-for="networth">
             <div class="kpi-label">Vlastní kapitál</div>
             <div id="kpi-networth" class="kpi-value">—</div>
+            <div class="kpi-formula-hint">Jak to počítám? ▸</div>
+            <div id="kpi-networth-formula" class="kpi-formula hidden"></div>
           </div>
-          <div class="kpi-card">
+          <div class="kpi-card kpi-clickable" data-formula-for="debtratio">
             <div class="kpi-label">Poměr zadlužení</div>
             <div id="kpi-debtratio" class="kpi-value">—</div>
+            <div class="kpi-formula-hint">Jak to počítám? ▸</div>
+            <div id="kpi-debtratio-formula" class="kpi-formula hidden"></div>
           </div>
-          <div class="kpi-card">
+          <div class="kpi-card kpi-clickable" data-formula-for="cashflow">
             <div class="kpi-label"><span id="kpi-cashflow-label">Roční cashflow</span></div>
             <div id="kpi-cashflow" class="kpi-value">—</div>
-            <div id="kpi-cashflow-breakdown" class="text-xs text-slate-400 mt-1"></div>
+            <div class="kpi-formula-hint">Jak to počítám? ▸</div>
+            <div id="kpi-cashflow-formula" class="kpi-formula hidden"></div>
           </div>
-          <div class="kpi-card">
+          <div class="kpi-card kpi-clickable" data-formula-for="appreciation">
             <div class="kpi-label"><span id="kpi-appreciation-label">Roční zhodnocení</span></div>
             <div id="kpi-appreciation" class="kpi-value">—</div>
+            <div class="kpi-formula-hint">Jak to počítám? ▸</div>
+            <div id="kpi-appreciation-formula" class="kpi-formula hidden"></div>
           </div>
-          <div class="kpi-card">
+          <div class="kpi-card kpi-clickable" data-formula-for="inflationloss">
             <div class="kpi-label"><span id="kpi-inflation-loss-label">Ztráta inflací (rok)</span></div>
             <div id="kpi-inflation-loss" class="kpi-value">—</div>
+            <div class="kpi-formula-hint">Jak to počítám? ▸</div>
+            <div id="kpi-inflation-loss-formula" class="kpi-formula hidden"></div>
           </div>
-          <div class="kpi-card">
+          <div class="kpi-card kpi-clickable" data-formula-for="realappreciation">
             <div class="kpi-label"><span id="kpi-real-appreciation-label">Zbývá po inflaci (rok)</span></div>
             <div id="kpi-real-appreciation" class="kpi-value">—</div>
+            <div class="kpi-formula-hint">Jak to počítám? ▸</div>
+            <div id="kpi-real-appreciation-formula" class="kpi-formula hidden"></div>
           </div>
-          <div class="kpi-card">
+          <div class="kpi-card kpi-clickable" data-formula-for="projected">
             <div class="kpi-label">Odhad majetku za 1 rok</div>
             <div id="kpi-projected-value" class="kpi-value">—</div>
+            <div class="kpi-formula-hint">Jak to počítám? ▸</div>
+            <div id="kpi-projected-value-formula" class="kpi-formula hidden"></div>
           </div>
         </div>
 
@@ -264,21 +281,29 @@
         </div>
 
         <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-          <div class="kpi-card">
+          <div class="kpi-card kpi-clickable" data-formula-for="sc-start-equity">
             <div class="kpi-label">Vlastní kapitál dnes</div>
             <div id="sc-kpi-start-equity" class="kpi-value">—</div>
+            <div class="kpi-formula-hint">Jak to počítám? ▸</div>
+            <div id="sc-kpi-start-equity-formula" class="kpi-formula hidden"></div>
           </div>
-          <div class="kpi-card">
+          <div class="kpi-card kpi-clickable" data-formula-for="sc-end-equity">
             <div class="kpi-label" id="sc-kpi-end-equity-label">Vlastní kapitál za 20 let</div>
             <div id="sc-kpi-end-equity" class="kpi-value">—</div>
+            <div class="kpi-formula-hint">Jak to počítám? ▸</div>
+            <div id="sc-kpi-end-equity-formula" class="kpi-formula hidden"></div>
           </div>
-          <div class="kpi-card">
+          <div class="kpi-card kpi-clickable" data-formula-for="sc-cashflow">
             <div class="kpi-label" id="sc-kpi-cashflow-label">Kumulovaný cashflow za 20 let</div>
             <div id="sc-kpi-cashflow" class="kpi-value">—</div>
+            <div class="kpi-formula-hint">Jak to počítám? ▸</div>
+            <div id="sc-kpi-cashflow-formula" class="kpi-formula hidden"></div>
           </div>
-          <div class="kpi-card">
+          <div class="kpi-card kpi-clickable" data-formula-for="sc-cagr">
             <div class="kpi-label">Průměrný roční růst kapitálu (CAGR)</div>
             <div id="sc-kpi-cagr" class="kpi-value">—</div>
+            <div class="kpi-formula-hint">Jak to počítám? ▸</div>
+            <div id="sc-kpi-cagr-formula" class="kpi-formula hidden"></div>
           </div>
         </div>
 

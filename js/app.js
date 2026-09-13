@@ -211,6 +211,7 @@ function init() {
   resetEventForm();
   wireScenarioDetailToggle();
   wireFreedomControls();
+  wireKpiFormulaToggles();
   document.getElementById('event-type').addEventListener('change', updateEventValueLabel);
   document.getElementById('scenario-horizon').addEventListener('input', (e) => {
     state.scenario.horizonYears = Math.max(1, Number(e.target.value) || 1);
@@ -643,6 +644,18 @@ function renderScenario() {
   document.getElementById('sc-kpi-cashflow').textContent = fmtMoney(summary.totalCashflow);
   document.getElementById('sc-kpi-cagr').textContent = summary.cagr === null ? '—' : fmtPercent(summary.cagr);
 
+  const first = rows[0];
+  const last = rows[rows.length - 1];
+  setFormula('sc-kpi-start-equity-formula', `Majetek dnes (${fmtMoney(first.totalValue)}) − dluh dnes (${fmtMoney(first.totalDebt)}) = ${fmtMoney(first.equity)}`);
+  setFormula('sc-kpi-end-equity-formula', `Majetek za ${horizon} let (${fmtMoney(last.totalValue)}) − dluh za ${horizon} let (${fmtMoney(last.totalDebt)}) = ${fmtMoney(last.equity)}`);
+  setFormula('sc-kpi-cashflow-formula', `Součet ročního cashflow za všech ${horizon} let (viz sloupec "Roční cashflow" v tabulce po letech níže) = ${fmtMoney(summary.totalCashflow)}`);
+  setFormula(
+    'sc-kpi-cagr-formula',
+    summary.cagr === null
+      ? 'Nelze spočítat - vlastní kapitál dnes musí být kladný.'
+      : `(vlastní kapitál za ${horizon} let ÷ vlastní kapitál dnes) ^ (1 ÷ ${horizon}) − 1 = (${fmtMoney(summary.endEquity)} ÷ ${fmtMoney(summary.startEquity)}) ^ (1/${horizon}) − 1 = ${fmtPercent(summary.cagr)}`
+  );
+
   const chartEl = document.getElementById('scenario-chart');
   chartEl.innerHTML = buildLineChartSVG([
     { label: 'Majetek', color: '#2563eb', points: rows.map((r) => ({ x: r.year, y: r.totalValue })) },
@@ -879,20 +892,21 @@ function renderOverview() {
   document.getElementById('kpi-inflation-loss-label').textContent = isMonth ? 'Ztráta inflací (měsíc)' : 'Ztráta inflací (rok)';
   document.getElementById('kpi-real-appreciation-label').textContent = isMonth ? 'Zbývá po inflaci (měsíc)' : 'Zbývá po inflaci (rok)';
 
-  const breakdownEl = document.getElementById('kpi-cashflow-breakdown');
+  setFormula('kpi-assets-formula', `Hodnota nemovitostí ve vlastnictví (${fmtMoney(row.realEstateValue)}) + hotovost z dřívějších prodejů (${fmtMoney(row.cashReserve)}) = ${fmtMoney(row.totalValue)}`);
+  setFormula('kpi-debt-formula', `Součet zbývající jistiny všech úvěrů zadaných v Moje úvěry = ${fmtMoney(row.totalDebt)}`);
+  setFormula('kpi-networth-formula', `Majetek (${fmtMoney(row.totalValue)}) − Dluh (${fmtMoney(row.totalDebt)}) = ${fmtMoney(row.equity)}`);
+  setFormula('kpi-debtratio-formula', `Dluh (${fmtMoney(row.totalDebt)}) ÷ Majetek (${fmtMoney(row.totalValue)}) = ${row.totalValue > 0 ? fmtPercent(row.totalDebt / row.totalValue) : '0 %'}`);
   if (row.totalRent != null) {
     const d = div;
-    const parts = [
-      `nájem +${fmtMoney(row.totalRent / d)}`,
-      `náklady -${fmtMoney(row.totalCosts / d)}`,
-      `úrok -${fmtMoney(row.totalInterest / d)}`,
-      `jistina -${fmtMoney(row.totalPrincipal / d)}`,
-      `daň -${fmtMoney(row.taxes / d)}`,
-    ];
-    breakdownEl.textContent = parts.join(' · ');
-  } else {
-    breakdownEl.textContent = '';
+    setFormula(
+      'kpi-cashflow-formula',
+      `Nájem +${fmtMoney(row.totalRent / d)} − náklady ${fmtMoney(row.totalCosts / d)} − úrok ${fmtMoney(row.totalInterest / d)} − jistina ${fmtMoney(row.totalPrincipal / d)} − daň ${fmtMoney(row.taxes / d)} = ${fmtMoney(row.cashflow / d)}. Úrok a jistina se počítají ze skutečné splátky úvěru v Moje úvěry, ne z pole "Splátka" u nemovitosti.`
+    );
+    setFormula('kpi-appreciation-formula', `Hodnota nemovitostí příští rok − hodnota dnes, součet za všechny nemovitosti podle jejich zadaného růstu = ${fmtMoney(row.appreciationGain / d)}`);
+    setFormula('kpi-inflation-loss-formula', `Hodnota nemovitostí (${fmtMoney(row.realEstateValue)}) × použitá míra inflace (${row.realEstateValue > 0 ? fmtPercent(row.inflationLoss / row.realEstateValue) : '0 %'}) = ${fmtMoney(row.inflationLoss / d)}`);
+    setFormula('kpi-real-appreciation-formula', `Roční zhodnocení (${fmtMoney(row.appreciationGain / d)}) − ztráta inflací (${fmtMoney(row.inflationLoss / d)}) = ${fmtMoney(row.realAppreciation / d)}`);
   }
+  setFormula('kpi-projected-value-formula', `Odhad hodnoty celého portfolia (nemovitosti + hotovost) v roce ${nextRow.year}, o rok dál než zvolený rok = ${fmtMoney(nextRow.totalValue)}`);
 
   const cashflowEl = document.getElementById('kpi-cashflow');
   cashflowEl.classList.toggle('text-red-600', (row.cashflow || 0) < 0);
@@ -1008,6 +1022,22 @@ async function clearAllData() {
   state.freedom = { horizonYears: 10 };
   saveState();
   renderAll();
+}
+
+/* ---------- Vzorce na kartách (klikni pro rozkliknutí) ---------- */
+
+function setFormula(id, text) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = text;
+}
+
+function wireKpiFormulaToggles() {
+  document.querySelectorAll('.kpi-clickable').forEach((card) => {
+    card.addEventListener('click', () => {
+      const formulaEl = card.querySelector('.kpi-formula');
+      if (formulaEl) formulaEl.classList.toggle('hidden');
+    });
+  });
 }
 
 /* ---------- Pomocné ---------- */
