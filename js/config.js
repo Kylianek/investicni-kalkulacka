@@ -14,5 +14,6 @@
  * 4. V Authentication -> Providers ověř, že je zapnuté "Email".
  * 5. Commitni a pushni - appka pak automaticky nabídne přihlášení v Nastavení.
  */
-const SUPABASE_URL = 'https://YOUR-PROJECT-REF.supabase.co';
-const SUPABASE_ANON_KEY = 'YOUR-ANON-PUBLIC-KEY';
+const SUPABASE_URL = 'https://hewxwtriukdkkhnhcfhf.supabase.co';
+const SUPABASE_ANON_KEY =
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhld3h3dHJpdWtka2tobmhjZmhmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk0MTA5NjksImV4cCI6MjEwNDk4Njk2OX0.aJpNmosyMTwR2xT8ViMKL28MuxARKerffnmca3ZYZV4';
