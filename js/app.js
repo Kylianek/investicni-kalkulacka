@@ -152,6 +152,17 @@ function customConfirm(message) {
   });
 }
 
+/**
+ * Nastaví hodnotu pole, JEN pokud na něm zrovna není focus. Používá se u polí
+ * jako "horizont"/"rok", kde render běží i z vlastního 'input' posluchače
+ * pole - bez tyhle podmínky by se hodnota psaná uživatelem přepisovala po
+ * každém stisku klávesy (nešlo by pole smazat/přepsat). Díky tomu se validace
+ * (např. minimum) projeví až po odfokusování, ne během psaní.
+ */
+function setValueIfNotFocused(el, value) {
+  if (document.activeElement !== el) el.value = value;
+}
+
 function preventEnterSubmit(form) {
   form.addEventListener('keydown', (e) => {
     if (e.key !== 'Enter') return;
@@ -220,6 +231,7 @@ function init() {
     renderOverview();
     renderFreedom();
   });
+  document.getElementById('scenario-horizon').addEventListener('blur', () => renderScenario());
   renderAll();
 }
 
@@ -281,7 +293,11 @@ function renderProperties() {
       ? calc.timeTestRemaining(new Date(p.acquisition_date), p.tax_exempt_years || 10)
       : null;
     const lienText = p.has_lien
-      ? `ANO — ${escapeHtml(p.lien_bank || '?')} (${fmtMoney(p.lien_value)})`
+      ? (() => {
+          const freed = Math.max(0, (Number(p.market_value) || 0) - (Number(p.lien_value) || 0));
+          const paceYear = (Number(p.market_value) || 0) * (Number(p.growth_rate) || 0);
+          return `ANO — ${escapeHtml(p.lien_bank || '?')}<br><span class="text-xs text-slate-500">zástava ${fmtMoney(p.lien_value)} · uvolněno ${fmtMoney(freed)}${paceYear > 0 ? ` (+${fmtMoney(paceYear)}/rok)` : ''}</span>`;
+        })()
       : 'NE';
     const tr = document.createElement('tr');
     tr.className = 'border-b border-slate-200 dark:border-slate-700';
@@ -624,7 +640,7 @@ function submitEventForm(e) {
 
 function renderScenario() {
   const horizon = state.scenario.horizonYears;
-  document.getElementById('scenario-horizon').value = horizon;
+  setValueIfNotFocused(document.getElementById('scenario-horizon'), horizon);
   document.getElementById('sc-kpi-end-equity-label').textContent = `Vlastní kapitál za ${horizon} let`;
   document.getElementById('sc-kpi-cashflow-label').textContent = `Kumulovaný cashflow za ${horizon} let`;
 
@@ -758,6 +774,7 @@ function wireFreedomControls() {
     saveState();
     renderFreedom();
   });
+  horizonInput.addEventListener('blur', () => renderFreedom());
 }
 
 function pluralYears(n) {
@@ -768,7 +785,7 @@ function pluralYears(n) {
 
 function renderFreedom() {
   const horizon = state.freedom.horizonYears;
-  document.getElementById('freedom-horizon').value = horizon;
+  setValueIfNotFocused(document.getElementById('freedom-horizon'), horizon);
 
   const plan = calc.simulateDebtFreedomPlan({
     properties: state.properties,
@@ -839,6 +856,7 @@ function wireOverviewControls() {
     saveState();
     renderOverview();
   });
+  yearInput.addEventListener('blur', () => renderOverview());
   document.getElementById('overview-year-reset').addEventListener('click', () => {
     state.overview.year = CURRENT_YEAR;
     yearInput.value = CURRENT_YEAR;
@@ -860,7 +878,7 @@ function setOverviewPeriod(period, skipRender) {
 
 function renderOverview() {
   const selectedYear = state.overview.year || CURRENT_YEAR;
-  document.getElementById('overview-year').value = selectedYear;
+  setValueIfNotFocused(document.getElementById('overview-year'), selectedYear);
 
   const yearsAhead = Math.max(selectedYear - CURRENT_YEAR, 0);
   const horizon = Math.max(state.scenario.horizonYears, yearsAhead + 1);
