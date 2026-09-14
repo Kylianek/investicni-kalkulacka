@@ -28,6 +28,9 @@ const state = {
 };
 
 let scenarioShowDetail = false;
+let currentUserId = null;
+let syncDebounceTimer = null;
+const SYNC_TABLE = 'app_data';
 
 const fmtMoney = (n) =>
   (Number(n) || 0).toLocaleString('cs-CZ', { maximumFractionDigits: 0 }) + ' Kč';
@@ -132,12 +135,14 @@ function wireZeroClearsOnFocus() {
  * napříč prohlížeči/mobilem (nativní confirm() se v některých kontextech umí
  * chovat nespolehlivě). Vrací Promise<boolean>.
  */
-function customConfirm(message) {
+function customConfirm(message, okLabel, cancelLabel) {
   return new Promise((resolve) => {
     const modal = document.getElementById('confirm-modal');
     const okBtn = document.getElementById('confirm-modal-ok');
     const cancelBtn = document.getElementById('confirm-modal-cancel');
     document.getElementById('confirm-modal-text').textContent = message;
+    okBtn.textContent = okLabel || 'Potvrdit';
+    cancelBtn.textContent = cancelLabel || 'Zrušit';
     modal.classList.remove('hidden');
     const cleanup = (result) => {
       modal.classList.add('hidden');
@@ -175,25 +180,29 @@ function preventEnterSubmit(form) {
 
 /* ---------- Perzistence (localStorage) ---------- */
 
+function applyStateFromObject(parsed) {
+  if (!parsed) return;
+  if (Array.isArray(parsed.properties)) state.properties = parsed.properties;
+  if (Array.isArray(parsed.loans)) state.loans = parsed.loans;
+  if (Array.isArray(parsed.events)) state.events = parsed.events;
+  if (parsed.settings) Object.assign(state.settings, parsed.settings);
+  if (parsed.scenario) Object.assign(state.scenario, parsed.scenario);
+  if (parsed.overview) Object.assign(state.overview, parsed.overview);
+  if (parsed.freedom) Object.assign(state.freedom, parsed.freedom);
+}
+
 function loadState() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return;
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed.properties)) state.properties = parsed.properties;
-    if (Array.isArray(parsed.loans)) state.loans = parsed.loans;
-    if (Array.isArray(parsed.events)) state.events = parsed.events;
-    if (parsed.settings) Object.assign(state.settings, parsed.settings);
-    if (parsed.scenario) Object.assign(state.scenario, parsed.scenario);
-    if (parsed.overview) Object.assign(state.overview, parsed.overview);
-    if (parsed.freedom) Object.assign(state.freedom, parsed.freedom);
+    applyStateFromObject(JSON.parse(raw));
   } catch (e) {
     console.error('Nepodařilo se načíst uložená data:', e);
   }
 }
 
-function saveState() {
-  const payload = {
+function stateSnapshot() {
+  return {
     properties: state.properties,
     loans: state.loans,
     events: state.events,
@@ -202,7 +211,143 @@ function saveState() {
     overview: state.overview,
     freedom: state.freedom,
   };
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+}
+
+function saveState() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(stateSnapshot()));
+  scheduleCloudSync();
+}
+
+/* ---------- Volitelné přihlášení a záloha do cloudu (Supabase) ---------- */
+
+function hasAnyPortfolioData() {
+  return state.properties.length > 0 || state.loans.length > 0;
+}
+
+function scheduleCloudSync() {
+  if (!currentUserId || !supabaseClient) return;
+  clearTimeout(syncDebounceTimer);
+  syncDebounceTimer = setTimeout(() => pushToCloud(currentUserId), 800);
+}
+
+async function pushToCloud(userId) {
+  if (!supabaseClient) return;
+  const { error } = await supabaseClient
+    .from(SYNC_TABLE)
+    .upsert({ user_id: userId, data: stateSnapshot(), updated_at: new Date().toISOString() });
+  const statusEl = document.getElementById('auth-sync-status');
+  if (statusEl) statusEl.textContent = error ? 'Zálohu do cloudu se nepodařilo uložit.' : 'Data jsou zálohovaná v cloudu.';
+}
+
+async function handlePostLogin(userId) {
+  currentUserId = userId;
+  const { data, error } = await supabaseClient.from(SYNC_TABLE).select('data').eq('user_id', userId).maybeSingle();
+  if (error) {
+    console.error(error);
+    return;
+  }
+  const cloud = data && data.data;
+  const cloudHasData = cloud && ((Array.isArray(cloud.properties) && cloud.properties.length) || (Array.isArray(cloud.loans) && cloud.loans.length));
+  const localHasData = hasAnyPortfolioData();
+
+  if (cloudHasData && localHasData) {
+    const useCloud = await customConfirm(
+      'Máš data uložená lokálně v tomhle prohlížeči i dřív zálohovaná v cloudu. Použít cloudová data? (přepíše tenhle prohlížeč) Zrušit = necháš lokální data a ty se nahrají do cloudu.',
+      'Použít cloudová data',
+      'Nechat lokální'
+    );
+    if (useCloud) {
+      applyStateFromObject(cloud);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(stateSnapshot()));
+      renderAll();
+    } else {
+      await pushToCloud(userId);
+    }
+  } else if (cloudHasData) {
+    applyStateFromObject(cloud);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(stateSnapshot()));
+    renderAll();
+  } else {
+    await pushToCloud(userId);
+  }
+}
+
+function updateAuthUI(session) {
+  const loggedOut = document.getElementById('auth-logged-out');
+  const loggedIn = document.getElementById('auth-logged-in');
+  if (session) {
+    loggedOut.classList.add('hidden');
+    loggedIn.classList.remove('hidden');
+    document.getElementById('auth-user-email').textContent = session.user.email;
+  } else {
+    loggedOut.classList.remove('hidden');
+    loggedIn.classList.add('hidden');
+    currentUserId = null;
+  }
+}
+
+function showAuthMessage(text) {
+  const el = document.getElementById('auth-message');
+  el.textContent = text;
+  el.classList.toggle('hidden', !text);
+}
+
+function translateAuthError(message) {
+  const known = {
+    'Invalid login credentials': 'Nesprávný e-mail nebo heslo.',
+    'User already registered': 'Uživatel s tímto e-mailem už existuje.',
+    'Password should be at least 6 characters': 'Heslo musí mít alespoň 6 znaků.',
+    'Email not confirmed': 'E-mail zatím nebyl potvrzen - zkontroluj schránku.',
+  };
+  return known[message] || message;
+}
+
+async function handleAuthLogin(e) {
+  e.preventDefault();
+  if (!supabaseClient) return;
+  const email = document.getElementById('auth-email').value.trim();
+  const password = document.getElementById('auth-password').value;
+  const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
+  showAuthMessage(error ? translateAuthError(error.message) : '');
+}
+
+async function handleAuthSignup() {
+  if (!supabaseClient) return;
+  const email = document.getElementById('auth-email').value.trim();
+  const password = document.getElementById('auth-password').value;
+  const { data, error } = await supabaseClient.auth.signUp({ email, password });
+  if (error) {
+    showAuthMessage(translateAuthError(error.message));
+    return;
+  }
+  if (data.user && !data.session) {
+    showAuthMessage('Registrace proběhla - zkontroluj e-mail a potvrď účet, pak se přihlas.');
+  }
+}
+
+async function handleAuthSignout() {
+  if (!supabaseClient) return;
+  await supabaseClient.auth.signOut();
+  currentUserId = null;
+}
+
+function initAuth() {
+  if (!supabaseClient) {
+    document.getElementById('auth-config-warning').classList.remove('hidden');
+    return;
+  }
+  document.getElementById('auth-form').addEventListener('submit', handleAuthLogin);
+  document.getElementById('btn-auth-signup').addEventListener('click', handleAuthSignup);
+  document.getElementById('btn-auth-signout').addEventListener('click', handleAuthSignout);
+
+  supabaseClient.auth.onAuthStateChange((_event, session) => {
+    updateAuthUI(session);
+    if (session) handlePostLogin(session.user.id);
+  });
+  supabaseClient.auth.getSession().then(({ data }) => {
+    updateAuthUI(data.session);
+    if (data.session) handlePostLogin(data.session.user.id);
+  });
 }
 
 /* ---------- Inicializace ---------- */
@@ -223,6 +368,7 @@ function init() {
   wireScenarioDetailToggle();
   wireFreedomControls();
   wireKpiFormulaToggles();
+  initAuth();
   document.getElementById('event-type').addEventListener('change', updateEventValueLabel);
   document.getElementById('scenario-horizon').addEventListener('input', (e) => {
     state.scenario.horizonYears = Math.max(1, Number(e.target.value) || 1);
@@ -360,7 +506,7 @@ function resetPropertyForm() {
 }
 
 async function deleteProperty(id) {
-  if (!(await customConfirm('Opravdu smazat tuto nemovitost?'))) return;
+  if (!(await customConfirm('Opravdu smazat tuto nemovitost?', 'Smazat'))) return;
   state.properties = state.properties.filter((p) => p.id !== id);
   saveState();
   renderAll();
@@ -470,7 +616,7 @@ function resetLoanForm() {
 }
 
 async function deleteLoan(id) {
-  if (!(await customConfirm('Opravdu smazat tento úvěr?'))) return;
+  if (!(await customConfirm('Opravdu smazat tento úvěr?', 'Smazat'))) return;
   state.loans = state.loans.filter((l) => l.id !== id);
   saveState();
   renderAll();
@@ -599,7 +745,7 @@ function resetEventForm() {
 }
 
 async function deleteEvent(id) {
-  if (!(await customConfirm('Smazat tuto scénářovou událost?'))) return;
+  if (!(await customConfirm('Smazat tuto scénářovou událost?', 'Smazat'))) return;
   state.events = state.events.filter((e) => e.id !== id);
   saveState();
   renderEvents();
@@ -975,16 +1121,7 @@ function wireBackup() {
 }
 
 function exportBackup() {
-  const payload = {
-    properties: state.properties,
-    loans: state.loans,
-    events: state.events,
-    settings: state.settings,
-    scenario: state.scenario,
-    overview: state.overview,
-    freedom: state.freedom,
-    exported_at: new Date().toISOString(),
-  };
+  const payload = { ...stateSnapshot(), exported_at: new Date().toISOString() };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -1003,7 +1140,7 @@ function importBackup(e) {
   reader.onload = async () => {
     try {
       const parsed = JSON.parse(reader.result);
-      if (!(await customConfirm('Nahrání zálohy přepíše aktuální data v tomto prohlížeči. Pokračovat?'))) return;
+      if (!(await customConfirm('Nahrání zálohy přepíše aktuální data v tomto prohlížeči. Pokračovat?', 'Nahrát a přepsat'))) return;
       state.properties = Array.isArray(parsed.properties) ? parsed.properties : [];
       state.loans = Array.isArray(parsed.loans) ? parsed.loans : [];
       state.events = Array.isArray(parsed.events) ? parsed.events : [];
@@ -1032,7 +1169,7 @@ function importBackup(e) {
 }
 
 async function clearAllData() {
-  if (!(await customConfirm('Opravdu smazat všechna data v tomto prohlížeči? Tuto akci nelze vrátit zpět.'))) return;
+  if (!(await customConfirm('Opravdu smazat všechna data v tomto prohlížeči? Tuto akci nelze vrátit zpět.', 'Smazat'))) return;
   state.properties = [];
   state.loans = [];
   state.events = [];

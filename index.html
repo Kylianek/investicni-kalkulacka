@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
 <title>Investiční kalkulačka nemovitostí</title>
 <script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <link rel="stylesheet" href="css/style.css" />
 </head>
 <body class="bg-slate-50 text-slate-800 min-h-screen">
@@ -457,6 +458,37 @@
       <!-- NASTAVENÍ -->
       <section id="tab-settings" class="tab-panel hidden">
         <div class="bg-white rounded-xl border border-slate-200 p-4 max-w-lg mb-4">
+          <h2 class="font-semibold mb-1">Přihlášení (volitelné)</h2>
+          <p class="text-xs text-slate-500 mb-3">
+            Appka funguje i bez přihlášení - data zůstávají jen v tomto prohlížeči. Přihlášením e-mailem
+            se navíc data zálohují do cloudu a budou dostupná i z jiného zařízení/prohlížeče.
+          </p>
+          <div id="auth-config-warning" class="hidden text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2 mb-3">
+            Přihlášení zatím není nastavené - viz návod v <code>js/config.js</code>.
+          </div>
+          <div id="auth-logged-out">
+            <form id="auth-form" class="space-y-2 text-sm max-w-xs">
+              <label class="flex flex-col gap-1">E-mail
+                <input id="auth-email" type="email" class="input" autocomplete="email" />
+              </label>
+              <label class="flex flex-col gap-1">Heslo
+                <input id="auth-password" type="password" class="input" autocomplete="current-password" minlength="6" />
+              </label>
+              <p id="auth-message" class="hidden text-xs"></p>
+              <div class="flex gap-2">
+                <button type="submit" class="btn-primary">Přihlásit se</button>
+                <button type="button" id="btn-auth-signup" class="btn-secondary">Vytvořit účet</button>
+              </div>
+            </form>
+          </div>
+          <div id="auth-logged-in" class="hidden text-sm">
+            <p class="mb-1">Přihlášen(a) jako <span id="auth-user-email" class="font-medium"></span></p>
+            <p id="auth-sync-status" class="text-xs text-slate-500 mb-3"></p>
+            <button type="button" id="btn-auth-signout" class="btn-secondary">Odhlásit se</button>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-xl border border-slate-200 p-4 max-w-lg mb-4">
           <h2 class="font-semibold mb-1">Inflace</h2>
           <p class="text-xs text-slate-500 mb-3">
             Používá se na Přehledu i ve Scénářích — snižuje reálnou hodnotu majetku v čase (KPI "Ztráta
@@ -529,11 +561,13 @@
       <p id="confirm-modal-text" class="text-sm text-slate-700 mb-4"></p>
       <div class="flex justify-end gap-2">
         <button type="button" id="confirm-modal-cancel" class="btn-secondary">Zrušit</button>
-        <button type="button" id="confirm-modal-ok" class="bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg px-4 py-2 text-sm">Smazat</button>
+        <button type="button" id="confirm-modal-ok" class="bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg px-4 py-2 text-sm">Potvrdit</button>
       </div>
     </div>
   </div>
 
+  <script src="js/config.js"></script>
+  <script src="js/supabaseClient.js"></script>
   <script src="js/calc.js"></script>
   <script src="js/app.js"></script>
 </body>
