@@ -827,11 +827,21 @@ function renderScenario() {
 
   const detailCell = (v) => `<td class="py-1.5 pr-3 text-right scenario-detail-col ${scenarioShowDetail ? '' : 'hidden'}">${v == null ? '—' : fmtMoney(v)}</td>`;
 
+  const saleEventCell = (r) => {
+    if (!r.soldThisYear) return '<td class="py-1.5 pr-3 text-xs text-slate-400"></td>';
+    const s = r.soldThisYear;
+    const taxNote = s.taxExempt ? 'bez daně - časový test splněn' : `po dani ${fmtMoney(s.estimatedSaleTax)}`;
+    return `<td class="py-1.5 pr-3 text-xs">
+      <span class="font-medium text-blue-700">Prodej: ${escapeHtml(s.propertyName)}</span><br>
+      <span class="text-slate-500">za ${fmtMoney(s.saleProceeds)} (${taxNote}) - dluh naspořeným zhodnocením ${fmtMoney(s.triggeredByGain)}, ${s.loanFullyCleared ? 'tím byl celý zbývající dluh splacen' : 'použito na částečné splacení dluhu'}</span>
+    </td>`;
+  };
+
   const tbody = document.getElementById('scenario-tbody');
   tbody.innerHTML = '';
   for (const r of rows) {
     const tr = document.createElement('tr');
-    tr.className = 'border-b border-slate-200' + (r.depreciationExhausted ? ' bg-orange-50' : '');
+    tr.className = 'border-b border-slate-200' + (r.soldThisYear ? ' bg-blue-50' : r.depreciationExhausted ? ' bg-orange-50' : '');
     tr.innerHTML = `
       <td class="py-1.5 pr-3">${r.year}</td>
       <td class="py-1.5 pr-3 text-right">${fmtMoney(r.totalValue)}</td>
@@ -843,8 +853,10 @@ function renderScenario() {
       ${detailCell(r.totalPrincipal)}
       ${detailCell(r.totalDepreciation)}
       ${detailCell(r.taxes)}
+      ${detailCell(r.cumulativeGain)}
       <td class="py-1.5 pr-3 text-right ${r.cashflow < 0 ? 'text-red-600' : ''}">${r.cashflow === null ? '—' : fmtMoney(r.cashflow)}</td>
-      <td class="py-1.5 pr-3 text-right">${fmtMoney(r.cumulativeCashflow)}</td>`;
+      <td class="py-1.5 pr-3 text-right">${fmtMoney(r.cumulativeCashflow)}</td>
+      ${saleEventCell(r)}`;
     tbody.appendChild(tr);
   }
 }
@@ -937,6 +949,7 @@ function renderFreedom() {
     properties: state.properties,
     loans: state.loans,
     settings: state.settings,
+    events: state.events,
     horizonYears: horizon,
     startYear: CURRENT_YEAR,
   });

@@ -170,12 +170,20 @@ function depreciationBase(property) {
  * Poslední řádek má jen stav (nemá už žádný další rok, ze kterého by tok počítal).
  * Daň z příjmu z pronájmu se tak počítá stejně pro "dnešek" i pro všechny
  * budoucí roky - na rozdíl od daně z prodeje se časového testu netýká.
+ *
+ * Součástí simulace je i AUTOMATICKÝ PRODEJ nemovitosti na umoření dluhu -
+ * stejná strategie jako dřív jen v záložce Osvobození od dluhu (viz podrobné
+ * vysvětlení principu u simulateDebtFreedomPlan níže), teď rovnou zapletená
+ * do hlavní projekce, aby: (1) šla vidět v tabulce Scénáře, a (2) použila
+ * STEJNÝ (skládaně rostoucí, událostmi ovlivněný) odhad budoucí ceny
+ * nemovitosti jako zbytek scénáře, místo jen ploché growth_rate nemovitosti.
  */
 function projectPortfolio({ properties, loans, settings, events, horizonYears, startYear }) {
   startYear = startYear || new Date().getFullYear();
   events = events || [];
   horizonYears = Math.max(1, Number(horizonYears) || 1);
   const rentalTaxRate = (Number(settings.rental_tax_rate) || 0) / 100;
+  const capGainsTaxRate = (Number(settings.capital_gains_tax_rate) || 0) / 100;
   const inflationBase = Number(settings.inflation_rate) || 0;
 
   const loanState = {};
@@ -187,6 +195,7 @@ function projectPortfolio({ properties, loans, settings, events, horizonYears, s
   const curRent = {};
   const curCost = {};
   const depRemaining = {};
+  const soldProperties = new Set();
   for (const p of properties) {
     curValue[p.id] = Number(p.market_value) || 0;
     curRent[p.id] = Number(p.rent) || 0;
@@ -200,11 +209,14 @@ function projectPortfolio({ properties, loans, settings, events, horizonYears, s
 
   let cashReserve = 0;
   let cumulativeCashflow = 0;
+  let cumulativeGain = 0; // zhodnocení portfolia nastřádané od posledního automatického prodeje
   const rows = [];
 
   for (let k = 0; k <= horizonYears; k++) {
     const stateYear = startYear + k;
-    const activeProps = properties.filter((p) => yearOf(p.acquisition_date, startYear) <= stateYear);
+    const activeProps = properties.filter(
+      (p) => yearOf(p.acquisition_date, startYear) <= stateYear && !soldProperties.has(p.id)
+    );
     const realEstateValue = activeProps.reduce((s, p) => s + curValue[p.id], 0);
     const totalDebt = loans.reduce((s, l) => s + loanState[l.id].remainingPrincipal, 0);
     const totalValue = realEstateValue + cashReserve;
@@ -230,6 +242,8 @@ function projectPortfolio({ properties, loans, settings, events, horizonYears, s
         totalDepreciation: null,
         depreciationExhausted: null,
         taxes: null,
+        cumulativeGain,
+        soldThisYear: null,
         perProperty: activeProps.map((p) => ({ id: p.id, name: p.name, value: curValue[p.id] })),
       });
       break;
@@ -301,6 +315,44 @@ function projectPortfolio({ properties, loans, settings, events, horizonYears, s
 
     const inflationLoss = realEstateValue * inflation;
 
+    // --- Automatický prodej nemovitosti na umoření dluhu ---
+    // Nespouští ho výše dluhu, ale to, kolik už samotné zhodnocení portfolia
+    // od posledního prodeje vydělalo (viz simulateDebtFreedomPlan). curValue
+    // tady už v sobě má i letošní růst podle scénářových událostí výše, takže
+    // se srovnává s AKTUÁLNÍ (už zhodnocenou) cenou nemovitostí k roku targetYear.
+    cumulativeGain += appreciationGain;
+    let soldThisYear = null;
+    const totalDebtNow = loans.reduce((s, l) => s + loanState[l.id].remainingPrincipal, 0);
+    const unsold = activeProps.filter((p) => curValue[p.id] > 0);
+    if (totalDebtNow > 0.01 && unsold.length) {
+      const cheapestValue = Math.min(...unsold.map((p) => curValue[p.id]));
+      if (cumulativeGain >= cheapestValue) {
+        const candidates = unsold
+          .map((p) => scoreSaleCandidate(p, curValue[p.id], capGainsTaxRate, new Date(targetYear, 0, 1)))
+          .sort((a, b) => b.score - a.score);
+        const fullyCovers = candidates.find((c) => c.netProceeds >= totalDebtNow);
+        const chosen = fullyCovers || candidates[0];
+
+        cashReserve += chosen.netProceeds;
+        soldProperties.add(chosen.property.id);
+        cashReserve = payDownDebtWithCash(loans, loanState, targetYear, cashReserve);
+        const totalDebtAfterSale = loans.reduce((s, l) => s + loanState[l.id].remainingPrincipal, 0);
+
+        soldThisYear = {
+          saleYear: targetYear,
+          propertyId: chosen.property.id,
+          propertyName: chosen.property.name,
+          saleProceeds: chosen.netProceeds,
+          estimatedSaleTax: chosen.estimatedSaleTax,
+          taxExempt: chosen.taxExempt,
+          triggeredByGain: cumulativeGain,
+          loanFullyCleared: totalDebtAfterSale <= 0.01,
+          cashAfter: cashReserve,
+        };
+        cumulativeGain = 0;
+      }
+    }
+
     rows.push({
       year: stateYear,
       realEstateValue,
@@ -320,6 +372,8 @@ function projectPortfolio({ properties, loans, settings, events, horizonYears, s
       totalDepreciation,
       depreciationExhausted,
       taxes: tax,
+      cumulativeGain,
+      soldThisYear,
       perProperty,
     });
   }
@@ -413,102 +467,40 @@ function payDownDebtWithCash(loans, loanState, stateYear, cashAvailable) {
 }
 
 /**
- * Plán "osvobození" portfolia od dluhu: každý rok nemovitosti rostou a úvěry
- * se přirozeně umořují (stejně jako v projectPortfolio). Jakákoliv volná
- * hotovost (z předchozích prodejů) se PRVNÍ vždy použije na doplacení dluhu.
- *
- * Kdy se prodává: NE podle toho, kolik dluhu zbývá (dluh může být cokoliv -
- * klidně malý), ale podle toho, kolik peněz už samotné ZHODNOCENÍ portfolia
- * od posledního prodeje vydělalo. Peníze se z portfolia dají získat jedině
- * prodejem CELÉ nemovitosti (žádná nestojí pár desítek tisíc) - takže se čeká,
- * dokud nashromážděné zhodnocení nedosáhne hodnoty aspoň nejlevnější dostupné
- * nemovitosti (typicky "kolik by stála náhrada"), a pak se ta nejvhodnější
- * (stejné bodování jako v kartě Doporučení) prodá, výtěžek splatí dluh a
- * počítadlo zhodnocení se vynuluje. Protože se srovnává s AKTUÁLNÍ (už
- * zhodnocenou) cenou nemovitostí, roste ta laťka rok od roku sama - přesně
- * jak dražší budou časem i náhradní nemovitosti stejné kvality.
+ * Plán "osvobození" portfolia od dluhu - teď jen tenký pohled na hlavní
+ * simulaci projectPortfolio (ta od teď sama umí automaticky prodávat
+ * nemovitosti na umoření dluhu, viz komentář u ní). Díky tomu je tahle
+ * záložka VŽDY přesně konzistentní se Scénáři - stejné prodeje, stejné roky,
+ * stejné částky - a navíc teď respektuje i scénářové události (růst, inflace,
+ * neobsazenost...), ne jen plochou growth_rate jednotlivé nemovitosti.
  *
  * Vrací { rows, events, debtFreeYear } - debtFreeYear je null, pokud se dluh
  * nepodaří do horizontu vynulovat.
  */
-function simulateDebtFreedomPlan({ properties, loans, settings, horizonYears, startYear }) {
+function simulateDebtFreedomPlan({ properties, loans, settings, events, horizonYears, startYear }) {
   startYear = startYear || new Date().getFullYear();
   horizonYears = Math.max(1, Number(horizonYears) || 1);
-  const capGainsTaxRate = (Number(settings.capital_gains_tax_rate) || 0) / 100;
 
-  const propState = properties.map((p) => ({ property: p, sold: false }));
-  const loanState = {};
-  for (const l of loans) {
-    loanState[l.id] = { remainingPrincipal: Number(l.amount) || 0, startYear: yearOf(l.start_date, startYear) };
-  }
-  const curValue = {};
-  for (const p of properties) curValue[p.id] = Number(p.market_value) || 0;
+  const result = projectPortfolio({ properties, loans, settings, events: events || [], horizonYears, startYear });
 
-  const rows = [];
+  const rows = result.rows.map((r) => ({
+    year: r.year,
+    totalDebt: r.totalDebt,
+    activeValue: r.realEstateValue,
+    cash: r.cashReserve,
+    cumulativeGain: r.cumulativeGain,
+    soldThisYear: r.soldThisYear,
+  }));
+
   const saleEvents = [];
+  for (const r of result.rows) {
+    if (r.soldThisYear) saleEvents.push({ year: r.soldThisYear.saleYear, ...r.soldThisYear });
+  }
+
   let debtFreeYear = null;
-  let cash = 0;
-  let cumulativeGain = 0; // zhodnocení portfolia nashromážděné od posledního prodeje
-
-  for (let k = 0; k <= horizonYears; k++) {
-    const stateYear = startYear + k;
-
-    if (k > 0) {
-      // rok amortizace + zhodnocení (stejná mechanika jako projectPortfolio)
-      for (const l of loans) amortizeLoanForYear(l, loanState[l.id], stateYear - 1, startYear);
-      for (const ps of propState) {
-        if (ps.sold) continue;
-        const before = curValue[ps.property.id];
-        curValue[ps.property.id] *= 1 + (Number(ps.property.growth_rate) || 0);
-        cumulativeGain += curValue[ps.property.id] - before;
-      }
-    }
-
-    cash = payDownDebtWithCash(loans, loanState, stateYear, cash);
-    let totalDebt = loans.reduce((s, l) => s + loanState[l.id].remainingPrincipal, 0);
-    const activeValue = propState.filter((ps) => !ps.sold).reduce((s, ps) => s + curValue[ps.property.id], 0);
-
-    let soldThisYear = null;
-    const unsold = propState.filter((ps) => !ps.sold);
-
-    if (totalDebt > 0.01 && unsold.length) {
-      const cheapestValue = Math.min(...unsold.map((ps) => curValue[ps.property.id]));
-      const worthSelling = cumulativeGain >= cheapestValue;
-
-      if (worthSelling) {
-        const candidates = unsold
-          .map((ps) => scoreSaleCandidate(ps.property, curValue[ps.property.id], capGainsTaxRate, new Date(stateYear, 0, 1)))
-          .sort((a, b) => b.score - a.score);
-        const fullyCovers = candidates.find((c) => c.netProceeds >= totalDebt);
-        const chosen = fullyCovers || candidates[0];
-
-        cash += chosen.netProceeds;
-        propState.find((ps) => ps.property.id === chosen.property.id).sold = true;
-        cash = payDownDebtWithCash(loans, loanState, stateYear, cash);
-        totalDebt = loans.reduce((s, l) => s + loanState[l.id].remainingPrincipal, 0);
-
-        soldThisYear = {
-          propertyName: chosen.property.name,
-          saleProceeds: chosen.netProceeds,
-          estimatedSaleTax: chosen.estimatedSaleTax,
-          taxExempt: chosen.taxExempt,
-          triggeredByGain: cumulativeGain,
-          loanFullyCleared: totalDebt <= 0.01,
-          cashAfter: cash,
-        };
-        saleEvents.push({ year: stateYear, ...soldThisYear });
-        cumulativeGain = 0;
-      }
-    }
-
-    rows.push({ year: stateYear, totalDebt, activeValue, cash, cumulativeGain, soldThisYear });
-
-    if (totalDebt <= 0.01) {
-      debtFreeYear = stateYear;
-      break;
-    }
-    if (propState.every((ps) => ps.sold)) {
-      // dluh zbyl, ale už není co prodat - konec simulace (nemá smysl pokračovat)
+  for (const r of result.rows) {
+    if (r.totalDebt <= 0.01) {
+      debtFreeYear = r.year;
       break;
     }
   }

@@ -277,7 +277,11 @@
           </label>
           <p class="text-xs text-slate-500 max-w-md">
             Predikce skládaně počítá růst hodnoty/nájmu (nájem roste podle vlastní sazby, nebo podle
-            inflace, pokud ji nezadáš) a reálně umořuje úvěry (úrok/jistina).
+            inflace, pokud ji nezadáš) a reálně umořuje úvěry (úrok/jistina). Pokud portfolio má dluh,
+            kalkulačka navíc automaticky simuluje prodej nejvhodnější nemovitosti, jakmile nastřádané
+            zhodnocení portfolia dosáhne hodnoty nejlevnější z nich (výtěžek jde na doplacení
+            nejnevýhodnějšího úvěru) - vidíš to ve sloupci "Událost" v tabulce níže a v řádku zvýrazněném
+            modře. Detaily a princip najdeš v záložce <strong>Osvobození od dluhu</strong>.
           </p>
         </div>
 
@@ -391,8 +395,10 @@
                 <th class="py-2 pr-3 text-right scenario-detail-col hidden">Jistina</th>
                 <th class="py-2 pr-3 text-right scenario-detail-col hidden">Odpis</th>
                 <th class="py-2 pr-3 text-right scenario-detail-col hidden">Daň</th>
+                <th class="py-2 pr-3 text-right scenario-detail-col hidden">Nashrom. zhodnocení</th>
                 <th class="py-2 pr-3 text-right">Roční cashflow</th>
                 <th class="py-2 pr-3 text-right">Kumulovaný cashflow</th>
+                <th class="py-2 pr-3">Událost</th>
               </tr>
             </thead>
             <tbody id="scenario-tbody"></tbody>
@@ -400,7 +406,9 @@
           <p class="text-xs text-slate-500 mt-3">
             Řádek oranžově zvýrazněný = odpis stavby je toho roku vyčerpaný (zjednodušeně 50 let od
             pořízení, viz vysvětlení v Nastavení) - daňová sazba na nájem se od té chvíle uplatňuje na
-            vyšší základ.
+            vyšší základ. Řádek modře zvýrazněný = ten rok kalkulačka automaticky prodala nemovitost na
+            umoření dluhu (sloupec "Událost", "Nashrom. zhodnocení" v detailu ukazuje, kolik zhodnocení se
+            do té chvíle nastřádalo).
           </p>
         </div>
       </section>
@@ -424,9 +432,12 @@
             výnos) a výtěžek splatí nejnevýhodnější úvěr - zbytek se počítá jako hotovost/vlastní kapitál
             a počítadlo zhodnocení začíná znovu od nuly. Protože se srovnává s aktuální (už zhodnocenou)
             cenou nemovitostí, roste ta laťka sama každý rok, stejně jako dražší bude i náhradní
-            nemovitost stejné kvality. Volná hotovost z dřívějších prodejů se navíc každý rok nejdřív
-            použije na doplacení úvěru s nejvyšší sazbou. Přesně princip "portfolio naroste, prodám byt,
-            splatím úvěr, tím uvolním víc majetku".
+            nemovitost stejné kvality (růst ceny počítáme stejně jako ve Scénářích - podle růstu zadaného
+            u nemovitosti i podle případných scénářových událostí). Volná hotovost z dřívějších prodejů se
+            navíc každý rok nejdřív použije na doplacení úvěru s nejvyšší sazbou. Přesně princip
+            "portfolio naroste, prodám byt, splatím úvěr, tím uvolním víc majetku". Tahle záložka používá
+            úplně stejný výpočet jako záložka <strong>Scénáře</strong> (jen s vlastním horizontem) - prodeje
+            uvidíš na obou místech shodně.
           </p>
         </div>
 
