@@ -21,7 +21,7 @@ const state = {
   properties: [],
   loans: [],
   events: [],
-  settings: { inflation_rate: 0.03, rental_tax_rate: 15, capital_gains_tax_rate: 15 },
+  settings: { inflation_rate: 0.03, rental_tax_rate: 15, capital_gains_tax_rate: 15, min_portfolio_value: 0 },
   scenario: { horizonYears: 20 },
   overview: { year: CURRENT_YEAR, period: 'year' },
   freedom: { horizonYears: 10 },
@@ -434,28 +434,29 @@ function renderProperties() {
   tbody.innerHTML = '';
   for (const p of state.properties) {
     const av = calc.appreciatedValue(Number(p.market_value), Number(p.growth_rate));
-    const released = (Number(p.market_value) || 0) - (Number(p.acquisition_price) || 0);
     const tt = p.acquisition_date
       ? calc.timeTestRemaining(new Date(p.acquisition_date), p.tax_exempt_years || 10)
       : null;
-    const lienText = p.has_lien
-      ? (() => {
-          const freed = Math.max(0, (Number(p.market_value) || 0) - (Number(p.lien_value) || 0));
-          const paceYear = (Number(p.market_value) || 0) * (Number(p.growth_rate) || 0);
-          return `ANO — ${escapeHtml(p.lien_bank || '?')}<br><span class="text-xs text-slate-500">zástava ${fmtMoney(p.lien_value)} · uvolněno ${fmtMoney(freed)}${paceYear > 0 ? ` (+${fmtMoney(paceYear)}/rok)` : ''}</span>`;
-        })()
-      : 'NE';
+    const marketValue = Number(p.market_value) || 0;
+    const lienValue = Number(p.lien_value) || 0;
+    const paceYear = marketValue * (Number(p.growth_rate) || 0);
+    const lienCell = p.has_lien
+      ? `${escapeHtml(p.lien_bank || '?')}<br><span class="text-xs text-slate-500">${fmtMoney(lienValue)}</span>`
+      : '<span class="text-slate-400">Bez zástavy</span>';
+    const freedCell = p.has_lien
+      ? `${fmtMoney(Math.max(0, marketValue - lienValue))}${paceYear > 0 ? `<br><span class="text-xs text-slate-500">+${fmtMoney(paceYear)}/rok</span>` : ''}`
+      : `${fmtMoney(marketValue)}<br><span class="text-xs text-slate-500">celá hodnota, bez zástavy</span>`;
     const tr = document.createElement('tr');
     tr.className = 'border-b border-slate-200 dark:border-slate-700';
     tr.innerHTML = `
       <td class="py-2 pr-3 font-medium">${escapeHtml(p.name)}</td>
       <td class="py-2 pr-3 text-right rent-positive">+${fmtMoney(p.rent)}</td>
       <td class="py-2 pr-3 text-right payment-negative">-${fmtMoney(p.payment)}</td>
-      <td class="py-2 pr-3 text-right">${fmtMoney(p.market_value)}</td>
-      <td class="py-2 pr-3 text-right ${released >= 0 ? 'rent-positive' : 'payment-negative'}">${fmtMoney(released)}</td>
+      <td class="py-2 pr-3 text-right">${fmtMoney(marketValue)}</td>
+      <td class="py-2 pr-3 text-right">${lienCell}</td>
+      <td class="py-2 pr-3 text-right">${freedCell}</td>
       <td class="py-2 pr-3 text-right">${fmtPercent(p.growth_rate)}</td>
       <td class="py-2 pr-3 text-right">${fmtMoney(av)}</td>
-      <td class="py-2 pr-3">${lienText}</td>
       <td class="py-2 pr-3">${tt ? tt.text : '—'}</td>
       <td class="py-2 pr-3 whitespace-nowrap">
         <button class="text-blue-600 hover:underline mr-2" data-edit-property="${p.id}">Upravit</button>
@@ -657,16 +658,19 @@ function renderSettings() {
   setFormattedValue(document.getElementById('inflation-input'), (state.settings.inflation_rate * 100).toFixed(2));
   setFormattedValue(document.getElementById('rental-tax-input'), state.settings.rental_tax_rate);
   setFormattedValue(document.getElementById('capgains-tax-input'), state.settings.capital_gains_tax_rate);
+  setFormattedValue(document.getElementById('min-portfolio-input'), state.settings.min_portfolio_value || '');
 }
 
 function wireSettingsInputs() {
   const inflationEl = document.getElementById('inflation-input');
   const rentalTaxEl = document.getElementById('rental-tax-input');
   const capGainsEl = document.getElementById('capgains-tax-input');
+  const minPortfolioEl = document.getElementById('min-portfolio-input');
   const save = () => {
     state.settings.inflation_rate = parseFormNumber(inflationEl.value) / 100;
     state.settings.rental_tax_rate = parseFormNumber(rentalTaxEl.value);
     state.settings.capital_gains_tax_rate = parseFormNumber(capGainsEl.value);
+    state.settings.min_portfolio_value = parseFormNumber(minPortfolioEl.value);
     saveState();
     renderScenario();
     renderOverview();
@@ -675,6 +679,7 @@ function wireSettingsInputs() {
   inflationEl.addEventListener('change', save);
   rentalTaxEl.addEventListener('change', save);
   capGainsEl.addEventListener('change', save);
+  minPortfolioEl.addEventListener('change', save);
 }
 
 /* ---------- SCÉNÁŘOVÉ UDÁLOSTI (celoportfoliové) ---------- */
@@ -815,7 +820,7 @@ function renderScenario() {
     'sc-kpi-cagr-formula',
     summary.cagr === null
       ? 'Nelze spočítat - vlastní kapitál dnes musí být kladný.'
-      : `(vlastní kapitál za ${horizon} let ÷ vlastní kapitál dnes) ^ (1 ÷ ${horizon}) − 1 = (${fmtMoney(summary.endEquity)} ÷ ${fmtMoney(summary.startEquity)}) ^ (1/${horizon}) − 1 = ${fmtPercent(summary.cagr)}`
+      : `(vlastní kapitál za ${horizon} let ÷ vlastní kapitál dnes) ^ (1 ÷ ${horizon}) − 1 = (${fmtMoney(summary.endEquity)} ÷ ${fmtMoney(summary.startEquity)}) ^ (1/${horizon}) − 1 = ${fmtPercent(summary.cagr)}. Počítá se z VLASTNÍHO kapitálu (majetek − dluh), takže v sobě zahrnuje i růst způsobený umořováním dluhu ze splátek - ne jen čisté zhodnocení nemovitostí.`
   );
 
   const chartEl = document.getElementById('scenario-chart');
@@ -825,7 +830,8 @@ function renderScenario() {
     { label: 'Vlastní kapitál', color: '#16a34a', points: rows.map((r) => ({ x: r.year, y: r.equity })) },
   ]);
 
-  const detailCell = (v) => `<td class="py-1.5 pr-3 text-right scenario-detail-col ${scenarioShowDetail ? '' : 'hidden'}">${v == null ? '—' : fmtMoney(v)}</td>`;
+  const detailCell = (v, colorClass) =>
+    `<td class="py-1.5 pr-3 text-right scenario-detail-col ${scenarioShowDetail ? '' : 'hidden'} ${colorClass || ''}">${v == null ? '—' : fmtMoney(v)}</td>`;
 
   const saleEventCell = (r) => {
     if (!r.soldThisYear) return '<td class="py-1.5 pr-3 text-xs text-slate-400"></td>';
@@ -840,6 +846,7 @@ function renderScenario() {
   const tbody = document.getElementById('scenario-tbody');
   tbody.innerHTML = '';
   for (const r of rows) {
+    const debtService = r.totalInterest == null ? null : r.totalInterest + r.totalPrincipal;
     const tr = document.createElement('tr');
     tr.className = 'border-b border-slate-200' + (r.soldThisYear ? ' bg-blue-50' : r.depreciationExhausted ? ' bg-orange-50' : '');
     tr.innerHTML = `
@@ -847,15 +854,13 @@ function renderScenario() {
       <td class="py-1.5 pr-3 text-right">${fmtMoney(r.totalValue)}</td>
       <td class="py-1.5 pr-3 text-right">${fmtMoney(r.totalDebt)}</td>
       <td class="py-1.5 pr-3 text-right font-medium">${fmtMoney(r.equity)}</td>
-      ${detailCell(r.totalRent)}
-      ${detailCell(r.totalCosts)}
-      ${detailCell(r.totalInterest)}
-      ${detailCell(r.totalPrincipal)}
+      ${detailCell(r.totalRent, 'figure-positive')}
+      ${detailCell(r.totalCosts, 'figure-negative')}
+      ${detailCell(debtService, 'figure-negative')}
       ${detailCell(r.totalDepreciation)}
-      ${detailCell(r.taxes)}
+      ${detailCell(r.taxes, 'figure-negative')}
       ${detailCell(r.cumulativeGain)}
-      <td class="py-1.5 pr-3 text-right ${r.cashflow < 0 ? 'text-red-600' : ''}">${r.cashflow === null ? '—' : fmtMoney(r.cashflow)}</td>
-      <td class="py-1.5 pr-3 text-right">${fmtMoney(r.cumulativeCashflow)}</td>
+      <td class="py-1.5 pr-3 text-right font-medium ${r.cashflow == null ? '' : r.cashflow < 0 ? 'figure-negative' : 'figure-positive'}">${r.cashflow === null ? '—' : fmtMoney(r.cashflow)}</td>
       ${saleEventCell(r)}`;
     tbody.appendChild(tr);
   }
@@ -865,7 +870,7 @@ function wireScenarioDetailToggle() {
   const btn = document.getElementById('scenario-detail-toggle');
   btn.addEventListener('click', () => {
     scenarioShowDetail = !scenarioShowDetail;
-    btn.textContent = scenarioShowDetail ? 'Skrýt detail' : 'Zobrazit detail (nájem, náklady, úrok, odpisy...)';
+    btn.textContent = scenarioShowDetail ? 'Skrýt detail' : 'Zobrazit detail (nájem, náklady, splátka, odpisy...)';
     document.querySelectorAll('.scenario-detail-col').forEach((el) => el.classList.toggle('hidden', !scenarioShowDetail));
   });
 }
@@ -1062,13 +1067,13 @@ function renderOverview() {
   document.getElementById('kpi-debtratio').textContent = row.totalValue > 0 ? fmtPercent(row.totalDebt / row.totalValue) : '0 %';
   document.getElementById('kpi-cashflow').textContent = fmtMoney((row.cashflow || 0) / div);
   document.getElementById('kpi-appreciation').textContent = fmtMoney((row.appreciationGain || 0) / div);
-  document.getElementById('kpi-inflation-loss').textContent = fmtMoney((row.inflationLoss || 0) / div);
+  document.getElementById('kpi-avg-growth').textContent = row.avgGrowthRate == null ? '—' : fmtPercent(row.avgGrowthRate);
+  document.getElementById('kpi-inflation-loss').textContent = row.inflationRate == null ? '—' : fmtPercent(row.inflationRate);
   document.getElementById('kpi-real-appreciation').textContent = fmtMoney((row.realAppreciation || 0) / div);
   document.getElementById('kpi-projected-value').textContent = fmtMoney(nextRow.totalValue);
 
   document.getElementById('kpi-cashflow-label').textContent = isMonth ? 'Měsíční cashflow' : 'Roční cashflow';
   document.getElementById('kpi-appreciation-label').textContent = isMonth ? 'Měsíční zhodnocení' : 'Roční zhodnocení';
-  document.getElementById('kpi-inflation-loss-label').textContent = isMonth ? 'Ztráta inflací (měsíc)' : 'Ztráta inflací (rok)';
   document.getElementById('kpi-real-appreciation-label').textContent = isMonth ? 'Zbývá po inflaci (měsíc)' : 'Zbývá po inflaci (rok)';
 
   setFormula('kpi-assets-formula', `Hodnota nemovitostí ve vlastnictví (${fmtMoney(row.realEstateValue)}) + hotovost z dřívějších prodejů (${fmtMoney(row.cashReserve)}) = ${fmtMoney(row.totalValue)}`);
@@ -1082,7 +1087,8 @@ function renderOverview() {
       `Nájem +${fmtMoney(row.totalRent / d)} − náklady ${fmtMoney(row.totalCosts / d)} − úrok ${fmtMoney(row.totalInterest / d)} − jistina ${fmtMoney(row.totalPrincipal / d)} − daň ${fmtMoney(row.taxes / d)} = ${fmtMoney(row.cashflow / d)}. Úrok a jistina se počítají ze skutečné splátky úvěru v Moje úvěry, ne z pole "Splátka" u nemovitosti.`
     );
     setFormula('kpi-appreciation-formula', `Hodnota nemovitostí příští rok − hodnota dnes, součet za všechny nemovitosti podle jejich zadaného růstu = ${fmtMoney(row.appreciationGain / d)}`);
-    setFormula('kpi-inflation-loss-formula', `Hodnota nemovitostí (${fmtMoney(row.realEstateValue)}) × použitá míra inflace (${row.realEstateValue > 0 ? fmtPercent(row.inflationLoss / row.realEstateValue) : '0 %'}) = ${fmtMoney(row.inflationLoss / d)}`);
+    setFormula('kpi-avg-growth-formula', `Roční zhodnocení (${fmtMoney(row.appreciationGain)}) ÷ hodnota nemovitostí (${fmtMoney(row.realEstateValue)}) = ${fmtPercent(row.avgGrowthRate)}. Vážený průměr růstu jednotlivých nemovitostí (podle jejich hodnoty), včetně případných scénářových událostí.`);
+    setFormula('kpi-inflation-loss-formula', `Míra inflace použitá pro přechod do roku ${nextRow.year} (ze Scénářů/Nastavení, případně přepsaná scénářovou událostí) = ${fmtPercent(row.inflationRate)}. Snižuje reálnou hodnotu nemovitostí o ${fmtMoney(row.inflationLoss / d)} ${isMonth ? 'měsíčně' : 'ročně'}.`);
     setFormula('kpi-real-appreciation-formula', `Roční zhodnocení (${fmtMoney(row.appreciationGain / d)}) − ztráta inflací (${fmtMoney(row.inflationLoss / d)}) = ${fmtMoney(row.realAppreciation / d)}`);
   }
   setFormula('kpi-projected-value-formula', `Odhad hodnoty celého portfolia (nemovitosti + hotovost) v roce ${nextRow.year}, o rok dál než zvolený rok = ${fmtMoney(nextRow.totalValue)}`);
@@ -1158,8 +1164,8 @@ function importBackup(e) {
       state.loans = Array.isArray(parsed.loans) ? parsed.loans : [];
       state.events = Array.isArray(parsed.events) ? parsed.events : [];
       state.settings = parsed.settings && typeof parsed.settings.inflation_rate === 'number'
-        ? { inflation_rate: 0.03, rental_tax_rate: 15, capital_gains_tax_rate: 15, ...parsed.settings }
-        : { inflation_rate: 0.03, rental_tax_rate: 15, capital_gains_tax_rate: 15 };
+        ? { inflation_rate: 0.03, rental_tax_rate: 15, capital_gains_tax_rate: 15, min_portfolio_value: 0, ...parsed.settings }
+        : { inflation_rate: 0.03, rental_tax_rate: 15, capital_gains_tax_rate: 15, min_portfolio_value: 0 };
       state.scenario = parsed.scenario && typeof parsed.scenario.horizonYears === 'number'
         ? parsed.scenario
         : { horizonYears: 20 };
@@ -1186,7 +1192,7 @@ async function clearAllData() {
   state.properties = [];
   state.loans = [];
   state.events = [];
-  state.settings = { inflation_rate: 0.03, rental_tax_rate: 15, capital_gains_tax_rate: 15 };
+  state.settings = { inflation_rate: 0.03, rental_tax_rate: 15, capital_gains_tax_rate: 15, min_portfolio_value: 0 };
   state.scenario = { horizonYears: 20 };
   state.overview = { year: CURRENT_YEAR, period: 'year' };
   state.freedom = { horizonYears: 10 };

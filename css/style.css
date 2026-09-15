@@ -124,6 +124,30 @@ body {
   color: #dc2626;
 }
 
+.kpi-card-debt {
+  background: #fef2f2;
+  border-color: #fecaca;
+}
+.kpi-card-debt .kpi-label,
+.kpi-card-debt .kpi-value {
+  color: #b91c1c;
+}
+.kpi-card-equity {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+}
+.kpi-card-equity .kpi-label,
+.kpi-card-equity .kpi-value {
+  color: #15803d;
+}
+
+.figure-negative {
+  color: #dc2626;
+}
+.figure-positive {
+  color: #16a34a;
+}
+
 .input-suffix-wrap {
   position: relative;
 }

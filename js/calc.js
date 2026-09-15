@@ -177,6 +177,9 @@ function depreciationBase(property) {
  * do hlavní projekce, aby: (1) šla vidět v tabulce Scénáře, a (2) použila
  * STEJNÝ (skládaně rostoucí, událostmi ovlivněný) odhad budoucí ceny
  * nemovitosti jako zbytek scénáře, místo jen ploché growth_rate nemovitosti.
+ * settings.min_portfolio_value (Kč, 0 = bez omezení) je ochranná hranice -
+ * prodej se nikdy neprovede, pokud by hodnota ZBÝVAJÍCÍCH nemovitostí klesla
+ * pod ni (viz karta "Minimální hodnota portfolia" v Nastavení).
  */
 function projectPortfolio({ properties, loans, settings, events, horizonYears, startYear }) {
   startYear = startYear || new Date().getFullYear();
@@ -185,6 +188,9 @@ function projectPortfolio({ properties, loans, settings, events, horizonYears, s
   const rentalTaxRate = (Number(settings.rental_tax_rate) || 0) / 100;
   const capGainsTaxRate = (Number(settings.capital_gains_tax_rate) || 0) / 100;
   const inflationBase = Number(settings.inflation_rate) || 0;
+  // Automatický prodej nikdy neprodá nemovitost, pokud by hodnota ZBÝVAJÍCÍCH
+  // nemovitostí klesla pod tuhle hranici (0 = žádná ochrana).
+  const minPortfolioValue = Number(settings.min_portfolio_value) || 0;
 
   const loanState = {};
   for (const l of loans) {
@@ -237,6 +243,8 @@ function projectPortfolio({ properties, loans, settings, events, horizonYears, s
         cashflow: null,
         cumulativeCashflow,
         appreciationGain: null,
+        avgGrowthRate: null,
+        inflationRate: null,
         inflationLoss: null,
         realAppreciation: null,
         totalRent: null,
@@ -327,7 +335,12 @@ function projectPortfolio({ properties, loans, settings, events, horizonYears, s
     cumulativeGain += appreciationGain;
     let soldThisYear = null;
     const totalDebtNow = activeLoans.reduce((s, l) => s + loanState[l.id].remainingPrincipal, 0);
-    const unsold = activeProps.filter((p) => curValue[p.id] > 0);
+    const realEstateValueNow = activeProps.reduce((s, p) => s + curValue[p.id], 0);
+    // Kandidát na prodej smí být jen nemovitost, jejíž prodej NESRAZÍ hodnotu
+    // zbývajících nemovitostí pod minPortfolioValue (viz nastavení).
+    const unsold = activeProps.filter(
+      (p) => curValue[p.id] > 0 && realEstateValueNow - curValue[p.id] >= minPortfolioValue
+    );
     if (totalDebtNow > 0.01 && unsold.length) {
       const cheapestValue = Math.min(...unsold.map((p) => curValue[p.id]));
       if (cumulativeGain >= cheapestValue) {
@@ -367,6 +380,8 @@ function projectPortfolio({ properties, loans, settings, events, horizonYears, s
       cashflow,
       cumulativeCashflow,
       appreciationGain,
+      avgGrowthRate: realEstateValue > 0 ? appreciationGain / realEstateValue : 0,
+      inflationRate: inflation,
       inflationLoss,
       realAppreciation: appreciationGain - inflationLoss,
       totalRent,

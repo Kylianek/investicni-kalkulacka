@@ -44,25 +44,29 @@
           <button type="button" id="overview-year-reset" class="btn-secondary">Dnešek</button>
         </div>
 
-        <div class="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
-          <div class="kpi-card kpi-clickable" data-formula-for="assets">
-            <div class="kpi-label">Majetek (tržní hodnota)</div>
-            <div id="kpi-assets" class="kpi-value">—</div>
-            <div class="kpi-formula-hint">Jak to počítám? ▸</div>
-            <div id="kpi-assets-formula" class="kpi-formula hidden"></div>
-          </div>
-          <div class="kpi-card kpi-clickable" data-formula-for="debt">
+        <div class="kpi-card kpi-clickable mb-4" data-formula-for="assets">
+          <div class="kpi-label">Majetek (tržní hodnota)</div>
+          <div id="kpi-assets" class="kpi-value">—</div>
+          <div class="kpi-formula-hint">Jak to počítám? ▸</div>
+          <div id="kpi-assets-formula" class="kpi-formula hidden"></div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4 mb-6">
+          <div class="kpi-card kpi-card-debt kpi-clickable" data-formula-for="debt">
             <div class="kpi-label">Dluh</div>
             <div id="kpi-debt" class="kpi-value">—</div>
             <div class="kpi-formula-hint">Jak to počítám? ▸</div>
             <div id="kpi-debt-formula" class="kpi-formula hidden"></div>
           </div>
-          <div class="kpi-card kpi-clickable" data-formula-for="networth">
+          <div class="kpi-card kpi-card-equity kpi-clickable" data-formula-for="networth">
             <div class="kpi-label">Vlastní kapitál</div>
             <div id="kpi-networth" class="kpi-value">—</div>
             <div class="kpi-formula-hint">Jak to počítám? ▸</div>
             <div id="kpi-networth-formula" class="kpi-formula hidden"></div>
           </div>
+        </div>
+
+        <div class="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
           <div class="kpi-card kpi-clickable" data-formula-for="debtratio">
             <div class="kpi-label">Poměr zadlužení</div>
             <div id="kpi-debtratio" class="kpi-value">—</div>
@@ -81,8 +85,14 @@
             <div class="kpi-formula-hint">Jak to počítám? ▸</div>
             <div id="kpi-appreciation-formula" class="kpi-formula hidden"></div>
           </div>
-          <div class="kpi-card kpi-clickable" data-formula-for="inflationloss">
-            <div class="kpi-label"><span id="kpi-inflation-loss-label">Ztráta inflací (rok)</span></div>
+          <div class="kpi-card kpi-clickable" data-formula-for="avggrowth">
+            <div class="kpi-label">Průměrné zhodnocení</div>
+            <div id="kpi-avg-growth" class="kpi-value">—</div>
+            <div class="kpi-formula-hint">Jak to počítám? ▸</div>
+            <div id="kpi-avg-growth-formula" class="kpi-formula hidden"></div>
+          </div>
+          <div class="kpi-card kpi-clickable" data-formula-for="inflationrate">
+            <div class="kpi-label">Míra inflace</div>
             <div id="kpi-inflation-loss" class="kpi-value">—</div>
             <div class="kpi-formula-hint">Jak to počítám? ▸</div>
             <div id="kpi-inflation-loss-formula" class="kpi-formula hidden"></div>
@@ -190,10 +200,10 @@
                 <th class="py-2 pr-3 text-right">Nájem</th>
                 <th class="py-2 pr-3 text-right">Splátka</th>
                 <th class="py-2 pr-3 text-right">Tržní hodnota</th>
-                <th class="py-2 pr-3 text-right">Uvolnitelný kapitál</th>
+                <th class="py-2 pr-3 text-right">Zástava</th>
+                <th class="py-2 pr-3 text-right">Uvolněno nad zástavu</th>
                 <th class="py-2 pr-3 text-right">Růst %</th>
                 <th class="py-2 pr-3 text-right">Po zhodnocení</th>
-                <th class="py-2 pr-3">Zástava</th>
                 <th class="py-2 pr-3">Časový test - zbývá</th>
                 <th class="py-2 pr-3"></th>
               </tr>
@@ -305,7 +315,7 @@
             <div id="sc-kpi-cashflow-formula" class="kpi-formula hidden"></div>
           </div>
           <div class="kpi-card kpi-clickable" data-formula-for="sc-cagr">
-            <div class="kpi-label">Průměrný roční růst kapitálu (CAGR)</div>
+            <div class="kpi-label">Průměrný roční růst vlastního kapitálu (CAGR)</div>
             <div id="sc-kpi-cagr" class="kpi-value">—</div>
             <div class="kpi-formula-hint">Jak to počítám? ▸</div>
             <div id="sc-kpi-cagr-formula" class="kpi-formula hidden"></div>
@@ -380,7 +390,7 @@
         <div class="bg-white rounded-xl border border-slate-200 p-4 overflow-x-auto">
           <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
             <h2 class="font-semibold">Tabulka po letech</h2>
-            <button type="button" id="scenario-detail-toggle" class="btn-secondary text-xs">Zobrazit detail (nájem, náklady, úrok, odpisy...)</button>
+            <button type="button" id="scenario-detail-toggle" class="btn-secondary text-xs">Zobrazit detail (nájem, náklady, splátka, odpisy...)</button>
           </div>
           <table class="w-full text-sm">
             <thead>
@@ -391,13 +401,11 @@
                 <th class="py-2 pr-3 text-right">Vlastní kapitál</th>
                 <th class="py-2 pr-3 text-right scenario-detail-col hidden">Nájem</th>
                 <th class="py-2 pr-3 text-right scenario-detail-col hidden">Náklady</th>
-                <th class="py-2 pr-3 text-right scenario-detail-col hidden">Úrok</th>
-                <th class="py-2 pr-3 text-right scenario-detail-col hidden">Jistina</th>
+                <th class="py-2 pr-3 text-right scenario-detail-col hidden">Splátka úvěru</th>
                 <th class="py-2 pr-3 text-right scenario-detail-col hidden">Odpis</th>
                 <th class="py-2 pr-3 text-right scenario-detail-col hidden">Daň</th>
                 <th class="py-2 pr-3 text-right scenario-detail-col hidden">Nashrom. zhodnocení</th>
                 <th class="py-2 pr-3 text-right">Roční cashflow</th>
-                <th class="py-2 pr-3 text-right">Kumulovaný cashflow</th>
                 <th class="py-2 pr-3">Událost</th>
               </tr>
             </thead>
@@ -437,7 +445,9 @@
             navíc každý rok nejdřív použije na doplacení úvěru s nejvyšší sazbou. Přesně princip
             "portfolio naroste, prodám byt, splatím úvěr, tím uvolním víc majetku". Tahle záložka používá
             úplně stejný výpočet jako záložka <strong>Scénáře</strong> (jen s vlastním horizontem) - prodeje
-            uvidíš na obou místech shodně.
+            uvidíš na obou místech shodně. Nikdy se ale neprodá nemovitost, pokud by tím hodnota
+            zbývajících nemovitostí klesla pod <strong>minimální hodnotu portfolia</strong> nastavenou
+            v Nastavení (0 = bez omezení).
           </p>
         </div>
 
@@ -540,6 +550,19 @@
           </p>
           <label class="flex flex-col gap-1 text-sm max-w-[10rem]">Sazba daně z prodeje (%)
             <input id="capgains-tax-input" data-unit="percent" class="input" />
+          </label>
+        </div>
+
+        <div class="bg-white rounded-xl border border-slate-200 p-4 max-w-lg mb-6">
+          <h2 class="font-semibold mb-1">Minimální hodnota portfolia</h2>
+          <p class="text-xs text-slate-500 mb-3">
+            Ochrana proti "rozprodání" portfolia: automatický prodej nemovitostí na umoření dluhu
+            (záložky <strong>Scénáře</strong> a <strong>Osvobození od dluhu</strong>) nikdy neprodá
+            nemovitost, pokud by tím hodnota zbývajících nemovitostí klesla pod tuhle částku.
+            Nech prázdné nebo 0, pokud žádnou ochranu nechceš.
+          </p>
+          <label class="flex flex-col gap-1 text-sm max-w-[12rem]">Minimální hodnota portfolia (Kč)
+            <input id="min-portfolio-input" data-unit="money" class="input" />
           </label>
         </div>
 
