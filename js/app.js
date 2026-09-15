@@ -127,6 +127,51 @@ function setFormattedValue(el, value) {
   el.dispatchEvent(new Event('input'));
 }
 
+/**
+ * Přidá vždy viditelné šipky nahoru/dolů ke všem číselným polím (roky,
+ * horizonty predikce...) - nativní spinner prohlížeče se u type="number"
+ * ukazuje jen při najetí myší/focusu a leckde vůbec, tenhle funguje všude
+ * stejně. Šipka jen mění hodnotu pole a vyvolá 'input'/'change' - o zbytek
+ * (uložení, přepočet) se postarají posluchače, které už na poli visí.
+ */
+function wireNumberSteppers() {
+  document.querySelectorAll('input[type="number"]').forEach((input) => {
+    if (input.closest('.number-stepper-wrap')) return;
+    const wrap = document.createElement('div');
+    wrap.className = 'number-stepper-wrap';
+    input.parentNode.insertBefore(wrap, input);
+    wrap.appendChild(input);
+
+    const bump = (dir) => {
+      const step = Number(input.step) || 1;
+      let next = (Number(input.value) || 0) + dir * step;
+      if (input.min !== '' && next < Number(input.min)) next = Number(input.min);
+      if (input.max !== '' && next > Number(input.max)) next = Number(input.max);
+      input.value = next;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    };
+
+    const buttons = document.createElement('div');
+    buttons.className = 'number-stepper-buttons';
+    const up = document.createElement('button');
+    up.type = 'button';
+    up.className = 'number-stepper-btn';
+    up.textContent = '▲';
+    up.setAttribute('aria-label', 'Zvýšit');
+    up.addEventListener('click', () => bump(1));
+    const down = document.createElement('button');
+    down.type = 'button';
+    down.className = 'number-stepper-btn';
+    down.textContent = '▼';
+    down.setAttribute('aria-label', 'Snížit');
+    down.addEventListener('click', () => bump(-1));
+    buttons.appendChild(up);
+    buttons.appendChild(down);
+    wrap.appendChild(buttons);
+  });
+}
+
 /* ---------- Klik do pole s "0" ho smaže; Enter v seznamových formulářích nic neodešle ---------- */
 
 function wireZeroClearsOnFocus() {
@@ -388,6 +433,7 @@ function init() {
   wireZeroClearsOnFocus();
   populateBankList();
   wireFormattedInputs();
+  wireNumberSteppers();
   syncLienFieldsVisibility();
   resetEventForm();
   wireScenarioDetailToggle();
@@ -840,7 +886,7 @@ function submitEventForm(e) {
 function renderScenario() {
   const horizon = state.scenario.horizonYears;
   setValueIfNotFocused(document.getElementById('scenario-horizon'), horizon);
-  document.getElementById('sc-kpi-end-equity-label').textContent = `Vlastní kapitál za ${horizon} let`;
+  document.getElementById('sc-kpi-end-debt-label').textContent = `Cizí kapitál za ${horizon} let`;
 
   const result = calc.projectPortfolio({
     properties: state.properties,
@@ -852,38 +898,22 @@ function renderScenario() {
   });
 
   const { rows, summary } = result;
-
-  document.getElementById('sc-kpi-start-equity').textContent = fmtMoney(summary.startEquity);
-  document.getElementById('sc-kpi-end-equity').textContent = fmtMoney(summary.endEquity);
-  document.getElementById('sc-kpi-avg-equity-growth').textContent = fmtMoney(summary.avgAnnualEquityGrowth);
-  document.getElementById('sc-kpi-cagr-assets').textContent = summary.cagrAssets === null ? '—' : fmtPercent(summary.cagrAssets);
-  document.getElementById('sc-kpi-cagr-equity-appreciation').textContent =
-    summary.cagrEquityAppreciationOnly === null ? '—' : fmtPercent(summary.cagrEquityAppreciationOnly);
-  document.getElementById('sc-kpi-cagr-equity-total').textContent =
-    summary.cagrEquityTotal === null ? '—' : fmtPercent(summary.cagrEquityTotal);
-
   const first = rows[0];
   const last = rows[rows.length - 1];
+
+  document.getElementById('sc-kpi-start-equity').textContent = fmtMoney(summary.startEquity);
+  document.getElementById('sc-kpi-end-debt').textContent = fmtMoney(last.totalDebt);
+  document.getElementById('sc-kpi-avg-equity-growth').textContent = fmtMoney(summary.avgAnnualEquityGrowth);
+  document.getElementById('sc-kpi-cagr-assets').textContent = summary.cagrAssets === null ? '—' : fmtPercent(summary.cagrAssets);
+
   setFormula('sc-kpi-start-equity-formula', `Majetek dnes (${fmtMoney(first.totalValue)}) − dluh dnes (${fmtMoney(first.totalDebt)}) = ${fmtMoney(first.equity)}`);
-  setFormula('sc-kpi-end-equity-formula', `Majetek za ${horizon} let (${fmtMoney(last.totalValue)}) − dluh za ${horizon} let (${fmtMoney(last.totalDebt)}) = ${fmtMoney(last.equity)}`);
+  setFormula('sc-kpi-end-debt-formula', `Součet zbývající jistiny všech úvěrů za ${horizon} let = ${fmtMoney(last.totalDebt)}. "Cizí kapitál" = peníze v nemovitostech, které ještě nejsou tvoje - jsou zastavené bance, dokud se úvěr nesplatí.`);
   setFormula('sc-kpi-avg-equity-growth-formula', `(Vlastní kapitál za ${horizon} let (${fmtMoney(summary.endEquity)}) − vlastní kapitál dnes (${fmtMoney(summary.startEquity)})) ÷ ${horizon} let = ${fmtMoney(summary.avgAnnualEquityGrowth)}/rok. Prostý (nesložený) průměr - kolik Kč ročně v průměru přibude na vlastním kapitálu.`);
   setFormula(
     'sc-kpi-cagr-assets-formula',
     summary.cagrAssets === null
       ? 'Nelze spočítat - majetek dnes musí být kladný.'
       : `(majetek za ${horizon} let ÷ majetek dnes) ^ (1 ÷ ${horizon}) − 1 = (${fmtMoney(last.totalValue)} ÷ ${fmtMoney(first.totalValue)}) ^ (1/${horizon}) − 1 = ${fmtPercent(summary.cagrAssets)}. Čistý růst MAJETKU (nemovitosti + hotovost) - dluh/páka na tohle číslo vůbec nemá vliv, je to "kolik reálně rostou tvoje aktiva".`
-  );
-  setFormula(
-    'sc-kpi-cagr-equity-appreciation-formula',
-    summary.cagrEquityAppreciationOnly === null
-      ? 'Nelze spočítat - vlastní kapitál dnes musí být kladný.'
-      : `(majetek za ${horizon} let − DNEŠNÍ dluh, jako by se vůbec neumořoval) ÷ vlastní kapitál dnes, na ${horizon}. odmocninu − 1 = ${fmtPercent(summary.cagrEquityAppreciationOnly)}. Ukazuje čistě efekt PÁKY na zhodnocení nemovitostí (menší vlastní základ = vyšší % růst), ale BEZ "bonusu" za to, že dluh mezitím splácíš z nájmu.`
-  );
-  setFormula(
-    'sc-kpi-cagr-equity-total-formula',
-    summary.cagrEquityTotal === null
-      ? 'Nelze spočítat - vlastní kapitál dnes musí být kladný.'
-      : `(vlastní kapitál za ${horizon} let ÷ vlastní kapitál dnes) ^ (1 ÷ ${horizon}) − 1 = (${fmtMoney(summary.endEquity)} ÷ ${fmtMoney(summary.startEquity)}) ^ (1/${horizon}) − 1 = ${fmtPercent(summary.cagrEquityTotal)}. Skutečný růst VLASTNÍHO kapitálu - v sobě má i efekt umořování jistiny ze splátek, proto vychází nejvyšší ze všech tří karet.`
   );
 
   const chartEl = document.getElementById('scenario-chart');
@@ -1145,7 +1175,6 @@ function renderOverviewGeneric(idPrefix, overviewState, deflate) {
   // Deflátor = kolikrát nominální Kč z vybraného roku "stojí míň" než dnešní Kč
   // kvůli inflaci mezi dneškem a tím rokem - viz cumulativeInflationFactor.
   const deflator = deflate ? calc.cumulativeInflationFactor(result.rows, idx) : 1;
-  const nextDeflator = deflate ? calc.cumulativeInflationFactor(result.rows, idx + 1) : 1;
   const real = (nominal) => (Number(nominal) || 0) / deflator;
 
   document.getElementById(idPrefix + 'kpi-assets').textContent = fmtMoney(real(row.totalValue));
@@ -1158,7 +1187,6 @@ function renderOverviewGeneric(idPrefix, overviewState, deflate) {
   document.getElementById(idPrefix + 'kpi-inflation-loss').textContent = row.inflationRate == null ? '—' : fmtPercent(row.inflationRate);
   document.getElementById(idPrefix + 'kpi-inflation-loss-amount').textContent = row.inflationLoss == null ? '—' : fmtMoney(real((row.inflationLoss || 0) / div));
   document.getElementById(idPrefix + 'kpi-real-appreciation').textContent = fmtMoney(real((row.realAppreciation || 0) / div));
-  document.getElementById(idPrefix + 'kpi-projected-value').textContent = fmtMoney((Number(nextRow.totalValue) || 0) / nextDeflator);
 
   document.getElementById(idPrefix + 'kpi-cashflow-label').textContent = isMonth ? 'Měsíční cashflow' : 'Roční cashflow';
   document.getElementById(idPrefix + 'kpi-appreciation-label').textContent = isMonth ? 'Měsíční zhodnocení' : 'Roční zhodnocení';
@@ -1180,7 +1208,6 @@ function renderOverviewGeneric(idPrefix, overviewState, deflate) {
     setFormula(idPrefix + 'kpi-inflation-loss-formula', `Míra inflace použitá pro přechod do roku ${nextRow.year} (ze Scénářů/Nastavení, případně přepsaná scénářovou událostí) = ${fmtPercent(row.inflationRate)}. Snižuje hodnotu nemovitostí o ${fmtMoney(real(row.inflationLoss / d))} ${isMonth ? 'měsíčně' : 'ročně'}.${realNote}`);
     setFormula(idPrefix + 'kpi-real-appreciation-formula', `Roční zhodnocení (${fmtMoney(real(row.appreciationGain / d))}) − ztráta inflací (${fmtMoney(real(row.inflationLoss / d))}) = ${fmtMoney(real(row.realAppreciation / d))}.${realNote}`);
   }
-  setFormula(idPrefix + 'kpi-projected-value-formula', `Odhad hodnoty celého portfolia (nemovitosti + hotovost) v roce ${nextRow.year}, o rok dál než zvolený rok = ${fmtMoney((Number(nextRow.totalValue) || 0) / nextDeflator)}.${realNote}`);
 
   const cashflowEl = document.getElementById(idPrefix + 'kpi-cashflow');
   cashflowEl.classList.toggle('text-red-600', (row.cashflow || 0) < 0);

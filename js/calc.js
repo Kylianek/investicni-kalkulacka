@@ -422,23 +422,10 @@ function projectPortfolio({ properties, loans, settings, events, horizonYears, s
   const first = rows[0];
   const last = rows[rows.length - 1];
 
-  // Tři různé pohledy na "průměrný roční růst", protože splácení dluhu z
-  // vlastního cashflow uměle nafukuje růst VLASTNÍHO kapitálu oproti čistému
-  // zhodnocení nemovitostí - viz karty ve Scénářích:
-  // 1) růst MAJETKU (nemovitosti + hotovost) - na dluh/páku vůbec nekouká.
+  // Růst MAJETKU (nemovitosti + hotovost) - na rozdíl od růstu vlastního
+  // kapitálu na dluh/páku vůbec nekouká, je to čisté zhodnocení aktiv.
   const cagrAssets =
     first.totalValue > 0 && last.totalValue > 0 ? Math.pow(last.totalValue / first.totalValue, 1 / horizonYears) - 1 : null;
-  // 2) růst vlastního kapitálu, KDYBY dluh zůstal přesně na dnešní výši (izoluje
-  // jen efekt páky na čisté zhodnocení, bez "zásluhy" za doplácení jistiny).
-  const equityIfDebtUnchanged = last.totalValue - first.totalDebt;
-  const cagrEquityAppreciationOnly =
-    first.equity > 0 && equityIfDebtUnchanged > 0
-      ? Math.pow(equityIfDebtUnchanged / first.equity, 1 / horizonYears) - 1
-      : null;
-  // 3) skutečný růst vlastního kapitálu (majetek − aktuální dluh) - v sobě má
-  // i efekt umořování jistiny, proto vychází nejvyšší ze všech tří.
-  const cagrEquityTotal =
-    first.equity > 0 && last.equity > 0 ? Math.pow(last.equity / first.equity, 1 / horizonYears) - 1 : null;
   // Prostý (nesložený) průměrný roční přírůstek vlastního kapitálu v Kč/rok.
   const avgAnnualEquityGrowth = (last.equity - first.equity) / horizonYears;
 
@@ -450,8 +437,6 @@ function projectPortfolio({ properties, loans, settings, events, horizonYears, s
       totalCashflow: last.cumulativeCashflow,
       totalGain: last.equity - first.equity + last.cumulativeCashflow,
       cagrAssets,
-      cagrEquityAppreciationOnly,
-      cagrEquityTotal,
       avgAnnualEquityGrowth,
     },
   };

@@ -233,3 +233,54 @@ body {
     transform: translateX(-50%) translateY(-8px) scale(0.95);
   }
 }
+
+/* Vždy viditelné šipky nahoru/dolů u číselných polí (roky, horizonty...) -
+   nativní spinner prohlížeče se ukazuje jen při najetí myší/focusu, tenhle je
+   vidět pořád a funguje stejně na dotykových zařízeních. */
+.number-stepper-wrap {
+  position: relative;
+  display: flex;
+}
+.number-stepper-wrap input[type='number'] {
+  padding-right: 1.6rem;
+  -moz-appearance: textfield;
+}
+.number-stepper-wrap input[type='number']::-webkit-inner-spin-button,
+.number-stepper-wrap input[type='number']::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.number-stepper-buttons {
+  position: absolute;
+  right: 1px;
+  top: 1px;
+  bottom: 1px;
+  display: flex;
+  flex-direction: column;
+  width: 1.5rem;
+}
+.number-stepper-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.6rem;
+  line-height: 1;
+  color: #64748b;
+  background: #f8fafc;
+  border: none;
+  border-left: 1px solid #cbd5e1;
+  cursor: pointer;
+  padding: 0;
+}
+.number-stepper-btn:first-child {
+  border-top-right-radius: 0.45rem;
+  border-bottom: 1px solid #e2e8f0;
+}
+.number-stepper-btn:last-child {
+  border-bottom-right-radius: 0.45rem;
+}
+.number-stepper-btn:hover {
+  background: #e2e8f0;
+  color: #1e293b;
+}
