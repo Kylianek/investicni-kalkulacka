@@ -436,8 +436,6 @@ function projectPortfolio({ properties, loans, settings, events, horizonYears, s
     assetGrowthFactor *= 1 + (Number(rows[k].avgGrowthRate) || 0);
   }
   const cagrAssets = Math.pow(assetGrowthFactor, 1 / horizonYears) - 1;
-  // Prostý (nesložený) průměrný roční přírůstek vlastního kapitálu v Kč/rok.
-  const avgAnnualEquityGrowth = (last.equity - first.equity) / horizonYears;
 
   return {
     rows,
@@ -447,7 +445,6 @@ function projectPortfolio({ properties, loans, settings, events, horizonYears, s
       totalCashflow: last.cumulativeCashflow,
       totalGain: last.equity - first.equity + last.cumulativeCashflow,
       cagrAssets,
-      avgAnnualEquityGrowth,
     },
   };
 }

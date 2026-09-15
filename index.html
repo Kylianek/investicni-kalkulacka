@@ -15,7 +15,7 @@
 <title>Investiční kalkulačka nemovitostí</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<link rel="stylesheet" href="css/style.css?v=1789506370" />
+<link rel="stylesheet" href="css/style.css?v=1789506859" />
 </head>
 <body class="bg-slate-50 text-slate-800 min-h-screen">
 
@@ -393,24 +393,18 @@
           </p>
         </div>
 
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-          <div class="kpi-card kpi-clickable" data-formula-for="sc-start-equity">
-            <div class="kpi-label">Vlastní kapitál dnes</div>
-            <div id="sc-kpi-start-equity" class="kpi-value">—</div>
+        <div class="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
+          <div class="kpi-card kpi-clickable" data-formula-for="sc-end-equity">
+            <div class="kpi-label" id="sc-kpi-end-equity-label">Vlastní kapitál za 20 let</div>
+            <div id="sc-kpi-end-equity" class="kpi-value">—</div>
             <div class="kpi-formula-hint">Jak to počítám? ▸</div>
-            <div id="sc-kpi-start-equity-formula" class="kpi-formula hidden"></div>
+            <div id="sc-kpi-end-equity-formula" class="kpi-formula hidden"></div>
           </div>
           <div class="kpi-card kpi-clickable" data-formula-for="sc-end-debt">
             <div class="kpi-label" id="sc-kpi-end-debt-label">Cizí kapitál za 20 let</div>
             <div id="sc-kpi-end-debt" class="kpi-value">—</div>
             <div class="kpi-formula-hint">Jak to počítám? ▸</div>
             <div id="sc-kpi-end-debt-formula" class="kpi-formula hidden"></div>
-          </div>
-          <div class="kpi-card kpi-clickable" data-formula-for="sc-avg-equity-growth">
-            <div class="kpi-label">Průměrný roční růst vlastního kapitálu (Kč/rok)</div>
-            <div id="sc-kpi-avg-equity-growth" class="kpi-value">—</div>
-            <div class="kpi-formula-hint">Jak to počítám? ▸</div>
-            <div id="sc-kpi-avg-equity-growth-formula" class="kpi-formula hidden"></div>
           </div>
           <div class="kpi-card kpi-clickable" data-formula-for="sc-cagr-assets">
             <div class="kpi-label">Průměrný roční růst majetku</div>
@@ -722,9 +716,9 @@
     <span id="success-toast-text">Uloženo</span>
   </div>
 
-  <script src="js/config.js?v=1789506370"></script>
-  <script src="js/supabaseClient.js?v=1789506370"></script>
-  <script src="js/calc.js?v=1789506370"></script>
-  <script src="js/app.js?v=1789506370"></script>
+  <script src="js/config.js?v=1789506859"></script>
+  <script src="js/supabaseClient.js?v=1789506859"></script>
+  <script src="js/calc.js?v=1789506859"></script>
+  <script src="js/app.js?v=1789506859"></script>
 </body>
 </html>

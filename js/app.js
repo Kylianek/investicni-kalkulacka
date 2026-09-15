@@ -512,12 +512,11 @@ function renderProperties() {
       : null;
     const marketValue = Number(p.market_value) || 0;
     const lienValue = Number(p.lien_value) || 0;
-    const paceYear = marketValue * (Number(p.growth_rate) || 0);
     const lienCell = p.has_lien
       ? `${escapeHtml(p.lien_bank || '?')}<br><span class="text-xs text-slate-500">${fmtMoney(lienValue)}</span>`
       : '<span class="text-slate-400">Bez zástavy</span>';
     const freedCell = p.has_lien
-      ? `${fmtMoney(Math.max(0, marketValue - lienValue))}${paceYear > 0 ? `<br><span class="text-xs text-slate-500">+${fmtMoney(paceYear)}/rok</span>` : ''}`
+      ? fmtMoney(Math.max(0, marketValue - lienValue))
       : `${fmtMoney(marketValue)}<br><span class="text-xs text-slate-500">celá hodnota, bez zástavy</span>`;
     const tr = document.createElement('tr');
     tr.className = 'border-b border-slate-200 dark:border-slate-700';
@@ -886,6 +885,7 @@ function submitEventForm(e) {
 function renderScenario() {
   const horizon = state.scenario.horizonYears;
   setValueIfNotFocused(document.getElementById('scenario-horizon'), horizon);
+  document.getElementById('sc-kpi-end-equity-label').textContent = `Vlastní kapitál za ${horizon} let`;
   document.getElementById('sc-kpi-end-debt-label').textContent = `Cizí kapitál za ${horizon} let`;
 
   const result = calc.projectPortfolio({
@@ -901,14 +901,12 @@ function renderScenario() {
   const first = rows[0];
   const last = rows[rows.length - 1];
 
-  document.getElementById('sc-kpi-start-equity').textContent = fmtMoney(summary.startEquity);
+  document.getElementById('sc-kpi-end-equity').textContent = fmtMoney(summary.endEquity);
   document.getElementById('sc-kpi-end-debt').textContent = fmtMoney(last.totalDebt);
-  document.getElementById('sc-kpi-avg-equity-growth').textContent = fmtMoney(summary.avgAnnualEquityGrowth);
   document.getElementById('sc-kpi-cagr-assets').textContent = fmtPercent(summary.cagrAssets);
 
-  setFormula('sc-kpi-start-equity-formula', `Majetek dnes (${fmtMoney(first.totalValue)}) − dluh dnes (${fmtMoney(first.totalDebt)}) = ${fmtMoney(first.equity)}`);
+  setFormula('sc-kpi-end-equity-formula', `Majetek za ${horizon} let (${fmtMoney(last.totalValue)}) − dluh za ${horizon} let (${fmtMoney(last.totalDebt)}) = ${fmtMoney(last.equity)}`);
   setFormula('sc-kpi-end-debt-formula', `Součet zbývající jistiny všech úvěrů za ${horizon} let = ${fmtMoney(last.totalDebt)}. "Cizí kapitál" = peníze v nemovitostech, které ještě nejsou tvoje - jsou zastavené bance, dokud se úvěr nesplatí.`);
-  setFormula('sc-kpi-avg-equity-growth-formula', `(Vlastní kapitál za ${horizon} let (${fmtMoney(summary.endEquity)}) − vlastní kapitál dnes (${fmtMoney(summary.startEquity)})) ÷ ${horizon} let = ${fmtMoney(summary.avgAnnualEquityGrowth)}/rok. Prostý (nesložený) průměr - kolik Kč ročně v průměru přibude na vlastním kapitálu.`);
   setFormula(
     'sc-kpi-cagr-assets-formula',
     `Složený průměr ročního zhodnocení nemovitostí za všech ${horizon} let (stejná sazba jako "Průměrné zhodnocení" na Přehledu, jen za celý horizont) = ${fmtPercent(summary.cagrAssets)}. Počítá se ze skutečné roční sazby zhodnocení, NE z porovnání celkové hodnoty portfolia na začátku a na konci - takže když si během horizontu koupíš další nemovitost, ten nákup se sem nepočítá jako "zhodnocení" (je to nový vklad, ne zisk).`
