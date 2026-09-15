@@ -18,6 +18,7 @@
       </div>
       <nav class="max-w-6xl mx-auto px-4 flex flex-wrap gap-1 -mb-px">
         <button class="tab-btn tab-active" data-tab="tab-overview">Přehled</button>
+        <button class="tab-btn" data-tab="tab-overview-real">Přehled (reálné hodnoty)</button>
         <button class="tab-btn" data-tab="tab-properties">Moje nemovitosti</button>
         <button class="tab-btn" data-tab="tab-loans">Moje úvěry</button>
         <button class="tab-btn" data-tab="tab-scenario">Scénáře</button>
@@ -94,6 +95,7 @@
           <div class="kpi-card kpi-clickable" data-formula-for="inflationrate">
             <div class="kpi-label">Míra inflace</div>
             <div id="kpi-inflation-loss" class="kpi-value">—</div>
+            <div id="kpi-inflation-loss-amount" class="text-xs text-slate-400 mt-1">—</div>
             <div class="kpi-formula-hint">Jak to počítám? ▸</div>
             <div id="kpi-inflation-loss-formula" class="kpi-formula hidden"></div>
           </div>
@@ -117,11 +119,108 @@
         </div>
       </section>
 
+      <!-- PŘEHLED (REÁLNÉ HODNOTY) -->
+      <section id="tab-overview-real" class="tab-panel hidden">
+        <div class="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6 text-sm text-blue-800">
+          Stejná čísla jako v záložce Přehled, ale všechny částky jsou přepočítané na <strong>dnešní kupní
+          sílu peněz</strong> (očištěné o inflaci) - takže "70 mil. Kč za 10 let" tu neuvidíš jako 70 mil.,
+          ale jako částku se stejnou kupní silou jako dnes. Procenta a poměry (růst, zadlužení...) inflaci
+          už v sobě nemají, ty přepočet nepotřebují.
+        </div>
+
+        <div class="bg-white rounded-xl border border-slate-200 p-4 mb-6 flex flex-wrap items-end gap-4">
+          <label class="flex flex-col gap-1 text-sm">Rok
+            <input id="real-overview-year" type="number" step="1" min="2000" max="2100" class="input w-28" />
+          </label>
+          <div class="flex flex-col gap-1 text-sm">
+            <span>Zobrazení</span>
+            <div class="flex rounded-lg border border-slate-300 overflow-hidden">
+              <button type="button" id="real-overview-period-year" class="period-toggle-btn period-toggle-active">Rok</button>
+              <button type="button" id="real-overview-period-month" class="period-toggle-btn">Měsíc</button>
+            </div>
+          </div>
+          <button type="button" id="real-overview-year-reset" class="btn-secondary">Dnešek</button>
+        </div>
+
+        <div class="kpi-card kpi-clickable mb-4" data-formula-for="real-assets">
+          <div class="kpi-label">Majetek (dnešní kupní síla)</div>
+          <div id="real-kpi-assets" class="kpi-value">—</div>
+          <div class="kpi-formula-hint">Jak to počítám? ▸</div>
+          <div id="real-kpi-assets-formula" class="kpi-formula hidden"></div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4 mb-6">
+          <div class="kpi-card kpi-card-debt kpi-clickable" data-formula-for="real-debt">
+            <div class="kpi-label">Dluh</div>
+            <div id="real-kpi-debt" class="kpi-value">—</div>
+            <div class="kpi-formula-hint">Jak to počítám? ▸</div>
+            <div id="real-kpi-debt-formula" class="kpi-formula hidden"></div>
+          </div>
+          <div class="kpi-card kpi-card-equity kpi-clickable" data-formula-for="real-networth">
+            <div class="kpi-label">Vlastní kapitál</div>
+            <div id="real-kpi-networth" class="kpi-value">—</div>
+            <div class="kpi-formula-hint">Jak to počítám? ▸</div>
+            <div id="real-kpi-networth-formula" class="kpi-formula hidden"></div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
+          <div class="kpi-card kpi-clickable" data-formula-for="real-debtratio">
+            <div class="kpi-label">Poměr zadlužení</div>
+            <div id="real-kpi-debtratio" class="kpi-value">—</div>
+            <div class="kpi-formula-hint">Jak to počítám? ▸</div>
+            <div id="real-kpi-debtratio-formula" class="kpi-formula hidden"></div>
+          </div>
+          <div class="kpi-card kpi-clickable" data-formula-for="real-cashflow">
+            <div class="kpi-label"><span id="real-kpi-cashflow-label">Roční cashflow</span></div>
+            <div id="real-kpi-cashflow" class="kpi-value">—</div>
+            <div class="kpi-formula-hint">Jak to počítám? ▸</div>
+            <div id="real-kpi-cashflow-formula" class="kpi-formula hidden"></div>
+          </div>
+          <div class="kpi-card kpi-clickable" data-formula-for="real-appreciation">
+            <div class="kpi-label"><span id="real-kpi-appreciation-label">Roční zhodnocení</span></div>
+            <div id="real-kpi-appreciation" class="kpi-value">—</div>
+            <div class="kpi-formula-hint">Jak to počítám? ▸</div>
+            <div id="real-kpi-appreciation-formula" class="kpi-formula hidden"></div>
+          </div>
+          <div class="kpi-card kpi-clickable" data-formula-for="real-avggrowth">
+            <div class="kpi-label">Průměrné zhodnocení</div>
+            <div id="real-kpi-avg-growth" class="kpi-value">—</div>
+            <div class="kpi-formula-hint">Jak to počítám? ▸</div>
+            <div id="real-kpi-avg-growth-formula" class="kpi-formula hidden"></div>
+          </div>
+          <div class="kpi-card kpi-clickable" data-formula-for="real-inflationrate">
+            <div class="kpi-label">Míra inflace</div>
+            <div id="real-kpi-inflation-loss" class="kpi-value">—</div>
+            <div id="real-kpi-inflation-loss-amount" class="text-xs text-slate-400 mt-1">—</div>
+            <div class="kpi-formula-hint">Jak to počítám? ▸</div>
+            <div id="real-kpi-inflation-loss-formula" class="kpi-formula hidden"></div>
+          </div>
+          <div class="kpi-card kpi-clickable" data-formula-for="real-realappreciation">
+            <div class="kpi-label"><span id="real-kpi-real-appreciation-label">Zbývá po inflaci (rok)</span></div>
+            <div id="real-kpi-real-appreciation" class="kpi-value">—</div>
+            <div class="kpi-formula-hint">Jak to počítám? ▸</div>
+            <div id="real-kpi-real-appreciation-formula" class="kpi-formula hidden"></div>
+          </div>
+          <div class="kpi-card kpi-clickable" data-formula-for="real-projected">
+            <div class="kpi-label">Odhad majetku za 1 rok</div>
+            <div id="real-kpi-projected-value" class="kpi-value">—</div>
+            <div class="kpi-formula-hint">Jak to počítám? ▸</div>
+            <div id="real-kpi-projected-value-formula" class="kpi-formula hidden"></div>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-xl border border-slate-200 p-4 text-sm text-slate-500">
+          Doporučení k prodeji/splacení najdeš v hlavní záložce <strong>Přehled</strong> - vždy se týká
+          dneška, takže na inflaci mezi dneškem a budoucností nezávisí.
+        </div>
+      </section>
+
       <!-- MOJE NEMOVITOSTI -->
       <section id="tab-properties" class="tab-panel hidden">
         <div class="bg-white rounded-xl border border-slate-200 p-4 mb-6">
           <h2 id="property-form-title" class="font-semibold mb-3">Přidat nemovitost</h2>
-          <form id="property-form" class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+          <form id="property-form" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-sm">
             <input type="hidden" name="id" />
             <label class="flex flex-col gap-1 col-span-2">Název
               <input name="name" required class="input" />
@@ -172,7 +271,7 @@
 
             <details class="col-span-full border-t border-slate-200 pt-3 mt-1">
               <summary class="cursor-pointer text-sm font-medium text-slate-600">Predikce a náklady (pro záložku Scénáře)</summary>
-              <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
+              <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 mt-3">
                 <label class="flex flex-col gap-1">Neobsazenost (%/rok)
                   <input name="vacancy_rate" data-unit="percent" class="input" />
                 </label>
@@ -217,7 +316,7 @@
       <section id="tab-loans" class="tab-panel hidden">
         <div class="bg-white rounded-xl border border-slate-200 p-4 mb-6">
           <h2 id="loan-form-title" class="font-semibold mb-3">Přidat úvěr</h2>
-          <form id="loan-form" class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+          <form id="loan-form" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-sm">
             <input type="hidden" name="id" />
             <label class="flex flex-col gap-1">Banka
               <input name="bank" list="bank-list" required class="input" />
@@ -295,7 +394,7 @@
           </p>
         </div>
 
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div class="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
           <div class="kpi-card kpi-clickable" data-formula-for="sc-start-equity">
             <div class="kpi-label">Vlastní kapitál dnes</div>
             <div id="sc-kpi-start-equity" class="kpi-value">—</div>
@@ -308,17 +407,29 @@
             <div class="kpi-formula-hint">Jak to počítám? ▸</div>
             <div id="sc-kpi-end-equity-formula" class="kpi-formula hidden"></div>
           </div>
-          <div class="kpi-card kpi-clickable" data-formula-for="sc-cashflow">
-            <div class="kpi-label" id="sc-kpi-cashflow-label">Kumulovaný cashflow za 20 let</div>
-            <div id="sc-kpi-cashflow" class="kpi-value">—</div>
+          <div class="kpi-card kpi-clickable" data-formula-for="sc-avg-equity-growth">
+            <div class="kpi-label">Průměrný roční růst vlastního kapitálu (Kč/rok)</div>
+            <div id="sc-kpi-avg-equity-growth" class="kpi-value">—</div>
             <div class="kpi-formula-hint">Jak to počítám? ▸</div>
-            <div id="sc-kpi-cashflow-formula" class="kpi-formula hidden"></div>
+            <div id="sc-kpi-avg-equity-growth-formula" class="kpi-formula hidden"></div>
           </div>
-          <div class="kpi-card kpi-clickable" data-formula-for="sc-cagr">
-            <div class="kpi-label">Průměrný roční růst vlastního kapitálu (CAGR)</div>
-            <div id="sc-kpi-cagr" class="kpi-value">—</div>
+          <div class="kpi-card kpi-clickable" data-formula-for="sc-cagr-assets">
+            <div class="kpi-label">Průměrný roční růst majetku</div>
+            <div id="sc-kpi-cagr-assets" class="kpi-value">—</div>
             <div class="kpi-formula-hint">Jak to počítám? ▸</div>
-            <div id="sc-kpi-cagr-formula" class="kpi-formula hidden"></div>
+            <div id="sc-kpi-cagr-assets-formula" class="kpi-formula hidden"></div>
+          </div>
+          <div class="kpi-card kpi-clickable" data-formula-for="sc-cagr-equity-appreciation">
+            <div class="kpi-label">Růst vlastního kapitálu (jen zhodnocení)</div>
+            <div id="sc-kpi-cagr-equity-appreciation" class="kpi-value">—</div>
+            <div class="kpi-formula-hint">Jak to počítám? ▸</div>
+            <div id="sc-kpi-cagr-equity-appreciation-formula" class="kpi-formula hidden"></div>
+          </div>
+          <div class="kpi-card kpi-clickable" data-formula-for="sc-cagr-equity-total">
+            <div class="kpi-label">Růst vlastního kapitálu (celkem, i se splácením)</div>
+            <div id="sc-kpi-cagr-equity-total" class="kpi-value">—</div>
+            <div class="kpi-formula-hint">Jak to počítám? ▸</div>
+            <div id="sc-kpi-cagr-equity-total-formula" class="kpi-formula hidden"></div>
           </div>
         </div>
 
@@ -342,7 +453,7 @@
             8 % zhodnocení každý jednotlivý rok po 10 let, ne jednorázově 8 % celkem. U dlouhého rozmezí
             i mírně vyšší číslo dá za pár let velký nárůst - to není chyba, je to složené úročení.
           </p>
-          <form id="event-form" class="grid grid-cols-2 md:grid-cols-5 gap-3 text-sm">
+          <form id="event-form" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3 text-sm">
             <input type="hidden" name="id" />
             <label class="flex flex-col gap-1">Typ
               <select name="type" id="event-type" class="input">
@@ -598,6 +709,13 @@
         <button type="button" id="confirm-modal-ok" class="bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg px-4 py-2 text-sm">Potvrdit</button>
       </div>
     </div>
+  </div>
+
+  <div id="success-toast" class="success-toast hidden" role="status" aria-live="polite">
+    <span class="success-toast-check">
+      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 13l4 4L19 7" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </span>
+    <span id="success-toast-text">Uloženo</span>
   </div>
 
   <script src="js/config.js"></script>

@@ -163,3 +163,73 @@ body {
   color: #94a3b8;
   pointer-events: none;
 }
+
+/* Přilepené záhlaví tabulek - při scrollování dlouhého seznamu (Scénáře,
+   Osvobození od dluhu...) zůstává popisek sloupců nahoře viditelný. */
+.overflow-x-auto table thead th {
+  position: sticky;
+  top: 0;
+  background: white;
+  z-index: 5;
+  box-shadow: 0 1px 0 0 #e2e8f0;
+}
+
+/* Potvrzovací "fajfka" po uložení nemovitosti/úvěru/události. */
+.success-toast {
+  position: fixed;
+  top: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: #16a34a;
+  color: white;
+  font-weight: 600;
+  font-size: 0.875rem;
+  padding: 0.6rem 1.1rem;
+  border-radius: 999px;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.2);
+  z-index: 100;
+  opacity: 0;
+  pointer-events: none;
+}
+.success-toast.success-toast-anim {
+  animation: success-toast-pop 1.8s ease forwards;
+}
+.success-toast-check {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.2rem;
+  height: 1.2rem;
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.25);
+  padding: 0.2rem;
+}
+.success-toast-check svg {
+  width: 100%;
+  height: 100%;
+}
+@keyframes success-toast-pop {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-12px) scale(0.85);
+  }
+  15% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0) scale(1.05);
+  }
+  25% {
+    transform: translateX(-50%) translateY(0) scale(1);
+  }
+  85% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-8px) scale(0.95);
+  }
+}

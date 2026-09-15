@@ -332,7 +332,10 @@ function projectPortfolio({ properties, loans, settings, events, horizonYears, s
     // od posledního prodeje vydělalo (viz simulateDebtFreedomPlan). curValue
     // tady už v sobě má i letošní růst podle scénářových událostí výše, takže
     // se srovnává s AKTUÁLNÍ (už zhodnocenou) cenou nemovitostí k roku targetYear.
-    cumulativeGain += appreciationGain;
+    // Nastřádané zhodnocení navíc samo podléhá inflaci (je to "papírový" zisk,
+    // dokud se nerealizuje prodejem) - starší část součtu se každý rok
+    // reálně znehodnotí, teprve pak se přičte letošní (ještě neznehodnocený) přírůstek.
+    cumulativeGain = cumulativeGain / (1 + inflation) + appreciationGain;
     let soldThisYear = null;
     const totalDebtNow = activeLoans.reduce((s, l) => s + loanState[l.id].remainingPrincipal, 0);
     const realEstateValueNow = activeProps.reduce((s, p) => s + curValue[p.id], 0);
@@ -399,8 +402,26 @@ function projectPortfolio({ properties, loans, settings, events, horizonYears, s
 
   const first = rows[0];
   const last = rows[rows.length - 1];
-  const cagr =
+
+  // Tři různé pohledy na "průměrný roční růst", protože splácení dluhu z
+  // vlastního cashflow uměle nafukuje růst VLASTNÍHO kapitálu oproti čistému
+  // zhodnocení nemovitostí - viz karty ve Scénářích:
+  // 1) růst MAJETKU (nemovitosti + hotovost) - na dluh/páku vůbec nekouká.
+  const cagrAssets =
+    first.totalValue > 0 && last.totalValue > 0 ? Math.pow(last.totalValue / first.totalValue, 1 / horizonYears) - 1 : null;
+  // 2) růst vlastního kapitálu, KDYBY dluh zůstal přesně na dnešní výši (izoluje
+  // jen efekt páky na čisté zhodnocení, bez "zásluhy" za doplácení jistiny).
+  const equityIfDebtUnchanged = last.totalValue - first.totalDebt;
+  const cagrEquityAppreciationOnly =
+    first.equity > 0 && equityIfDebtUnchanged > 0
+      ? Math.pow(equityIfDebtUnchanged / first.equity, 1 / horizonYears) - 1
+      : null;
+  // 3) skutečný růst vlastního kapitálu (majetek − aktuální dluh) - v sobě má
+  // i efekt umořování jistiny, proto vychází nejvyšší ze všech tří.
+  const cagrEquityTotal =
     first.equity > 0 && last.equity > 0 ? Math.pow(last.equity / first.equity, 1 / horizonYears) - 1 : null;
+  // Prostý (nesložený) průměrný roční přírůstek vlastního kapitálu v Kč/rok.
+  const avgAnnualEquityGrowth = (last.equity - first.equity) / horizonYears;
 
   return {
     rows,
@@ -409,9 +430,28 @@ function projectPortfolio({ properties, loans, settings, events, horizonYears, s
       endEquity: last.equity,
       totalCashflow: last.cumulativeCashflow,
       totalGain: last.equity - first.equity + last.cumulativeCashflow,
-      cagr,
+      cagrAssets,
+      cagrEquityAppreciationOnly,
+      cagrEquityTotal,
+      avgAnnualEquityGrowth,
     },
   };
+}
+
+/**
+ * Kumulovaný inflační "deflátor" mezi rows[0] (dnešek) a rows[uptoIndex] -
+ * součin (1 + míra inflace) za každý rok mezi nimi, podle skutečně použité
+ * (scénářovými událostmi případně přepsané) inflace v jednotlivých letech
+ * (rows[k].inflationRate). Vydělením nominální částky tímhle číslem dostaneš
+ * "kolik by ta budoucí částka byla dnes za peníze" (reálnou hodnotu v
+ * dnešních Kč) - používá se v záložce Přehled (reálné hodnoty).
+ */
+function cumulativeInflationFactor(rows, uptoIndex) {
+  let factor = 1;
+  for (let k = 0; k < uptoIndex; k++) {
+    factor *= 1 + (Number(rows[k].inflationRate) || 0);
+  }
+  return factor;
 }
 
 /**
@@ -444,10 +484,15 @@ function recommendActions(properties, loans, settings, today = new Date()) {
 
   let bestProperty = null;
   let bestScore = -Infinity;
+  let hasProperties = false;
   for (const p of properties) {
     const marketValue = Number(p.market_value) || 0;
     if (marketValue <= 0) continue;
+    hasProperties = true;
     const candidate = scoreSaleCandidate(p, marketValue, capGainsTaxRate, today);
+    // Doporučit k prodeji dává smysl jen po splnění časového testu - jinak by
+    // prodej navíc podléhal dani z příjmu a doporučení by bylo zavádějící.
+    if (!candidate.taxExempt) continue;
     if (candidate.score > bestScore) {
       bestScore = candidate.score;
       bestProperty = candidate;
@@ -460,8 +505,8 @@ function recommendActions(properties, loans, settings, today = new Date()) {
     if (!worstLoan || rate > worstLoan.rate) worstLoan = { loan: l, rate };
   }
 
-  if (!bestProperty && !worstLoan) return null;
-  return { bestProperty, worstLoan };
+  if (!bestProperty && !worstLoan && !hasProperties) return null;
+  return { bestProperty, worstLoan, hasProperties };
 }
 
 /**
@@ -540,6 +585,7 @@ window.calc = {
   amortizeLoanForYear,
   scoreSaleCandidate,
   projectPortfolio,
+  cumulativeInflationFactor,
   recommendActions,
   simulateDebtFreedomPlan,
 };
