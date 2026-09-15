@@ -1,4 +1,13 @@
 <!DOCTYPE html>
+<!--
+  Skripty/styly níže mají "?v=<timestamp>" - GitHub Pages/CDN cachuje každý
+  soubor zvlášť (~10 min), takže bez toho by po nasazení mohla chvíli běžet
+  NEKONZISTENTNÍ kombinace starého+nového JS/CSS (typicky se to projeví jako
+  "appka přestala počítat" - stará app.js sahá na element, který v nové
+  HTML/CSS už neexistuje, atd.). Při KAŽDÉ změně js/*.js nebo css/*.css
+  aktualizuj to číslo (např. na aktuální unix timestamp) ve VŠECH tazích níže
+  najednou, ať se vždycky stáhnou jako jeden konzistentní balíček.
+-->
 <html lang="cs">
 <head>
 <meta charset="UTF-8" />
@@ -6,7 +15,7 @@
 <title>Investiční kalkulačka nemovitostí</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<link rel="stylesheet" href="css/style.css" />
+<link rel="stylesheet" href="css/style.css?v=1789506370" />
 </head>
 <body class="bg-slate-50 text-slate-800 min-h-screen">
 
@@ -713,9 +722,9 @@
     <span id="success-toast-text">Uloženo</span>
   </div>
 
-  <script src="js/config.js"></script>
-  <script src="js/supabaseClient.js"></script>
-  <script src="js/calc.js"></script>
-  <script src="js/app.js"></script>
+  <script src="js/config.js?v=1789506370"></script>
+  <script src="js/supabaseClient.js?v=1789506370"></script>
+  <script src="js/calc.js?v=1789506370"></script>
+  <script src="js/app.js?v=1789506370"></script>
 </body>
 </html>
