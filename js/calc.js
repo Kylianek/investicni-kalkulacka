@@ -187,6 +187,9 @@ function depreciationBase(property) {
  * - settings.sale_trigger_amount (Kč, 0/prázdné = výchozí chování) pevně
  *   určuje, kolik nastřádaného zhodnocení stačí k prodeji - když není
  *   zadáno, použije se cena nejlevnější dostupné nemovitosti (viz níže).
+ * Pevné pravidlo bez výjimky: nemovitost se NIKDY neprodá, dokud u ní
+ * neuplyne časový test (viz timeTestRemaining) - i kdyby jinak byla
+ * nejlépe bodovaným kandidátem. Než ho splní, do výběru se vůbec nepočítá.
  */
 function projectPortfolio({ properties, loans, settings, events, horizonYears, startYear }) {
   startYear = startYear || new Date().getFullYear();
@@ -354,10 +357,15 @@ function projectPortfolio({ properties, loans, settings, events, horizonYears, s
       const totalDebtNow = activeLoans.reduce((s, l) => s + loanState[l.id].remainingPrincipal, 0);
       const realEstateValueNow = activeProps.reduce((s, p) => s + curValue[p.id], 0);
       // Kandidát na prodej smí být jen nemovitost, jejíž prodej NESRAZÍ hodnotu
-      // zbývajících nemovitostí pod minPortfolioValue (viz nastavení).
-      const unsold = activeProps.filter(
-        (p) => curValue[p.id] > 0 && realEstateValueNow - curValue[p.id] >= minPortfolioValue
-      );
+      // zbývajících nemovitostí pod minPortfolioValue (viz nastavení), A ZÁROVEŇ
+      // u ní musí být už splněný časový test - nemovitost se NIKDY neprodává
+      // před jeho splněním (i za cenu zaplacení daně), to je pevné pravidlo.
+      const unsold = activeProps.filter((p) => {
+        if (curValue[p.id] <= 0) return false;
+        if (realEstateValueNow - curValue[p.id] < minPortfolioValue) return false;
+        if (!p.acquisition_date) return true;
+        return timeTestRemaining(new Date(p.acquisition_date), Number(p.tax_exempt_years) || 10, new Date(targetYear, 0, 1)).done;
+      });
       if (totalDebtNow > 0.01 && unsold.length) {
         const cheapestValue = Math.min(...unsold.map((p) => curValue[p.id]));
         // Práh, po jehož dosažení se prodává: buď pevná částka zadaná v

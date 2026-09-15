@@ -15,7 +15,7 @@
 <title>Investiční kalkulačka nemovitostí</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<link rel="stylesheet" href="css/style.css?v=1789506859" />
+<link rel="stylesheet" href="css/style.css?v=1789507445" />
 </head>
 <body class="bg-slate-50 text-slate-800 min-h-screen">
 
@@ -388,8 +388,9 @@
             nastavit vlastní práh), kalkulačka navíc simuluje prodej nejvhodnější nemovitosti, jakmile
             nastřádané zhodnocení portfolia dosáhne nastaveného prahu (výchozí: cena nejlevnější z nich) -
             výtěžek jde na doplacení nejnevýhodnějšího úvěru, vidíš to ve sloupci "Událost" v tabulce níže
-            a v řádku zvýrazněném modře. Detaily a princip najdeš v záložce
-            <strong>Osvobození od dluhu</strong>.
+            a v řádku zvýrazněném modře. <strong>Prodává se jen nemovitost, u které už uplynul časový
+            test</strong> - dokud ho nesplní, nikdy se neprodá, ani se zdaněním. Detaily a princip najdeš
+            v záložce <strong>Osvobození od dluhu</strong>.
           </p>
         </div>
 
@@ -528,8 +529,9 @@
             nemovitostí, a jakmile ten součet dosáhne nastaveného prahu (výchozí: cena aspoň nejlevnější
             dostupné nemovitosti, např. portfolio 100 mil. Kč při 5 % ročně vydělá 5 mil. Kč/rok
             zhodnocením - to už je částka, za kterou reálně jde byt prodat), prodá se ta nejvhodnější
-            (stejné bodování jako v kartě <strong>Doporučení</strong>: vysoké zhodnocení, ideálně po
-            časovém testu, slabý provozní výnos) a výtěžek splatí nejnevýhodnější úvěr - zbytek se počítá
+            <strong>z nemovitostí, u kterých už uplynul časový test</strong> (jinou appka nikdy neprodá,
+            ani se zdaněním) - mezi nimi rozhoduje stejné bodování jako v kartě <strong>Doporučení</strong>
+            (vysoké zhodnocení, slabý provozní výnos) a výtěžek splatí nejnevýhodnější úvěr - zbytek se počítá
             jako hotovost/vlastní kapitál a počítadlo zhodnocení začíná znovu od nuly. Protože se
             srovnává s aktuální (už zhodnocenou) cenou nemovitostí, roste ta laťka sama každý rok, stejně
             jako dražší bude i náhradní nemovitost stejné kvality (růst ceny počítáme stejně jako ve
@@ -716,9 +718,9 @@
     <span id="success-toast-text">Uloženo</span>
   </div>
 
-  <script src="js/config.js?v=1789506859"></script>
-  <script src="js/supabaseClient.js?v=1789506859"></script>
-  <script src="js/calc.js?v=1789506859"></script>
-  <script src="js/app.js?v=1789506859"></script>
+  <script src="js/config.js?v=1789507445"></script>
+  <script src="js/supabaseClient.js?v=1789507445"></script>
+  <script src="js/calc.js?v=1789507445"></script>
+  <script src="js/app.js?v=1789507445"></script>
 </body>
 </html>
