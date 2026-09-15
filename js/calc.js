@@ -177,9 +177,16 @@ function depreciationBase(property) {
  * do hlavní projekce, aby: (1) šla vidět v tabulce Scénáře, a (2) použila
  * STEJNÝ (skládaně rostoucí, událostmi ovlivněný) odhad budoucí ceny
  * nemovitosti jako zbytek scénáře, místo jen ploché growth_rate nemovitosti.
- * settings.min_portfolio_value (Kč, 0 = bez omezení) je ochranná hranice -
- * prodej se nikdy neprovede, pokud by hodnota ZBÝVAJÍCÍCH nemovitostí klesla
- * pod ni (viz karta "Minimální hodnota portfolia" v Nastavení).
+ * Celý tenhle automatický prodej je VOLITELNÝ (viz karta "Automatický
+ * prodej nemovitostí" v Nastavení):
+ * - settings.auto_sell_enabled (výchozí true, pokud chybí) ho jako celek
+ *   zapíná/vypíná.
+ * - settings.min_portfolio_value (Kč, 0 = bez omezení) je ochranná hranice -
+ *   prodej se nikdy neprovede, pokud by hodnota ZBÝVAJÍCÍCH nemovitostí
+ *   klesla pod ni.
+ * - settings.sale_trigger_amount (Kč, 0/prázdné = výchozí chování) pevně
+ *   určuje, kolik nastřádaného zhodnocení stačí k prodeji - když není
+ *   zadáno, použije se cena nejlevnější dostupné nemovitosti (viz níže).
  */
 function projectPortfolio({ properties, loans, settings, events, horizonYears, startYear }) {
   startYear = startYear || new Date().getFullYear();
@@ -188,9 +195,15 @@ function projectPortfolio({ properties, loans, settings, events, horizonYears, s
   const rentalTaxRate = (Number(settings.rental_tax_rate) || 0) / 100;
   const capGainsTaxRate = (Number(settings.capital_gains_tax_rate) || 0) / 100;
   const inflationBase = Number(settings.inflation_rate) || 0;
-  // Automatický prodej nikdy neprodá nemovitost, pokud by hodnota ZBÝVAJÍCÍCH
-  // nemovitostí klesla pod tuhle hranici (0 = žádná ochrana).
+  // Automatický prodej nemovitostí na umoření dluhu (volitelný, viz Nastavení):
+  // autoSellEnabled ho jako celek zapíná/vypíná, minPortfolioValue nikdy
+  // neprodá nemovitost, pokud by hodnota ZBÝVAJÍCÍCH klesla pod tuhle hranici
+  // (0 = žádná ochrana), a saleTriggerAmount určuje pevnou částku nastřádaného
+  // zhodnocení, po které se prodává - když je 0/prázdná, použije se výchozí
+  // logika (cena nejlevnější dostupné nemovitosti, viz níže).
+  const autoSellEnabled = settings.auto_sell_enabled !== false;
   const minPortfolioValue = Number(settings.min_portfolio_value) || 0;
+  const saleTriggerAmount = Number(settings.sale_trigger_amount) || 0;
 
   const loanState = {};
   for (const l of loans) {
@@ -337,39 +350,45 @@ function projectPortfolio({ properties, loans, settings, events, horizonYears, s
     // reálně znehodnotí, teprve pak se přičte letošní (ještě neznehodnocený) přírůstek.
     cumulativeGain = cumulativeGain / (1 + inflation) + appreciationGain;
     let soldThisYear = null;
-    const totalDebtNow = activeLoans.reduce((s, l) => s + loanState[l.id].remainingPrincipal, 0);
-    const realEstateValueNow = activeProps.reduce((s, p) => s + curValue[p.id], 0);
-    // Kandidát na prodej smí být jen nemovitost, jejíž prodej NESRAZÍ hodnotu
-    // zbývajících nemovitostí pod minPortfolioValue (viz nastavení).
-    const unsold = activeProps.filter(
-      (p) => curValue[p.id] > 0 && realEstateValueNow - curValue[p.id] >= minPortfolioValue
-    );
-    if (totalDebtNow > 0.01 && unsold.length) {
-      const cheapestValue = Math.min(...unsold.map((p) => curValue[p.id]));
-      if (cumulativeGain >= cheapestValue) {
-        const candidates = unsold
-          .map((p) => scoreSaleCandidate(p, curValue[p.id], capGainsTaxRate, new Date(targetYear, 0, 1)))
-          .sort((a, b) => b.score - a.score);
-        const fullyCovers = candidates.find((c) => c.netProceeds >= totalDebtNow);
-        const chosen = fullyCovers || candidates[0];
+    if (autoSellEnabled) {
+      const totalDebtNow = activeLoans.reduce((s, l) => s + loanState[l.id].remainingPrincipal, 0);
+      const realEstateValueNow = activeProps.reduce((s, p) => s + curValue[p.id], 0);
+      // Kandidát na prodej smí být jen nemovitost, jejíž prodej NESRAZÍ hodnotu
+      // zbývajících nemovitostí pod minPortfolioValue (viz nastavení).
+      const unsold = activeProps.filter(
+        (p) => curValue[p.id] > 0 && realEstateValueNow - curValue[p.id] >= minPortfolioValue
+      );
+      if (totalDebtNow > 0.01 && unsold.length) {
+        const cheapestValue = Math.min(...unsold.map((p) => curValue[p.id]));
+        // Práh, po jehož dosažení se prodává: buď pevná částka zadaná v
+        // Nastavení (saleTriggerAmount), nebo (výchozí) cena nejlevnější
+        // dostupné nemovitosti - "kolik reálně stojí náhrada".
+        const threshold = saleTriggerAmount > 0 ? saleTriggerAmount : cheapestValue;
+        if (cumulativeGain >= threshold) {
+          const candidates = unsold
+            .map((p) => scoreSaleCandidate(p, curValue[p.id], capGainsTaxRate, new Date(targetYear, 0, 1)))
+            .sort((a, b) => b.score - a.score);
+          const fullyCovers = candidates.find((c) => c.netProceeds >= totalDebtNow);
+          const chosen = fullyCovers || candidates[0];
 
-        cashReserve += chosen.netProceeds;
-        soldProperties.add(chosen.property.id);
-        cashReserve = payDownDebtWithCash(activeLoans, loanState, targetYear, cashReserve);
-        const totalDebtAfterSale = activeLoans.reduce((s, l) => s + loanState[l.id].remainingPrincipal, 0);
+          cashReserve += chosen.netProceeds;
+          soldProperties.add(chosen.property.id);
+          cashReserve = payDownDebtWithCash(activeLoans, loanState, targetYear, cashReserve);
+          const totalDebtAfterSale = activeLoans.reduce((s, l) => s + loanState[l.id].remainingPrincipal, 0);
 
-        soldThisYear = {
-          saleYear: targetYear,
-          propertyId: chosen.property.id,
-          propertyName: chosen.property.name,
-          saleProceeds: chosen.netProceeds,
-          estimatedSaleTax: chosen.estimatedSaleTax,
-          taxExempt: chosen.taxExempt,
-          triggeredByGain: cumulativeGain,
-          loanFullyCleared: totalDebtAfterSale <= 0.01,
-          cashAfter: cashReserve,
-        };
-        cumulativeGain = 0;
+          soldThisYear = {
+            saleYear: targetYear,
+            propertyId: chosen.property.id,
+            propertyName: chosen.property.name,
+            saleProceeds: chosen.netProceeds,
+            estimatedSaleTax: chosen.estimatedSaleTax,
+            taxExempt: chosen.taxExempt,
+            triggeredByGain: cumulativeGain,
+            loanFullyCleared: totalDebtAfterSale <= 0.01,
+            cashAfter: cashReserve,
+          };
+          cumulativeGain = 0;
+        }
       }
     }
 

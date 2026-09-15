@@ -21,7 +21,14 @@ const state = {
   properties: [],
   loans: [],
   events: [],
-  settings: { inflation_rate: 0.03, rental_tax_rate: 15, capital_gains_tax_rate: 15, min_portfolio_value: 0 },
+  settings: {
+    inflation_rate: 0.03,
+    rental_tax_rate: 15,
+    capital_gains_tax_rate: 15,
+    min_portfolio_value: 0,
+    auto_sell_enabled: true,
+    sale_trigger_amount: 0,
+  },
   scenario: { horizonYears: 20 },
   overview: { year: CURRENT_YEAR, period: 'year' },
   overviewReal: { year: CURRENT_YEAR, period: 'year' },
@@ -680,20 +687,33 @@ function renderSettings() {
   setFormattedValue(document.getElementById('inflation-input'), (state.settings.inflation_rate * 100).toFixed(2));
   setFormattedValue(document.getElementById('rental-tax-input'), state.settings.rental_tax_rate);
   setFormattedValue(document.getElementById('capgains-tax-input'), state.settings.capital_gains_tax_rate);
+  document.getElementById('auto-sell-enabled-input').checked = state.settings.auto_sell_enabled !== false;
+  setFormattedValue(document.getElementById('sale-trigger-input'), state.settings.sale_trigger_amount || '');
   setFormattedValue(document.getElementById('min-portfolio-input'), state.settings.min_portfolio_value || '');
+  syncAutoSellOptionsVisibility();
+}
+
+function syncAutoSellOptionsVisibility() {
+  const enabled = document.getElementById('auto-sell-enabled-input').checked;
+  document.getElementById('auto-sell-options').classList.toggle('hidden', !enabled);
 }
 
 function wireSettingsInputs() {
   const inflationEl = document.getElementById('inflation-input');
   const rentalTaxEl = document.getElementById('rental-tax-input');
   const capGainsEl = document.getElementById('capgains-tax-input');
+  const autoSellEnabledEl = document.getElementById('auto-sell-enabled-input');
+  const saleTriggerEl = document.getElementById('sale-trigger-input');
   const minPortfolioEl = document.getElementById('min-portfolio-input');
   const save = () => {
     state.settings.inflation_rate = parseFormNumber(inflationEl.value) / 100;
     state.settings.rental_tax_rate = parseFormNumber(rentalTaxEl.value);
     state.settings.capital_gains_tax_rate = parseFormNumber(capGainsEl.value);
+    state.settings.auto_sell_enabled = autoSellEnabledEl.checked;
+    state.settings.sale_trigger_amount = parseFormNumber(saleTriggerEl.value);
     state.settings.min_portfolio_value = parseFormNumber(minPortfolioEl.value);
     saveState();
+    syncAutoSellOptionsVisibility();
     renderScenario();
     renderOverview();
     renderOverviewReal();
@@ -702,6 +722,8 @@ function wireSettingsInputs() {
   inflationEl.addEventListener('change', save);
   rentalTaxEl.addEventListener('change', save);
   capGainsEl.addEventListener('change', save);
+  autoSellEnabledEl.addEventListener('change', save);
+  saleTriggerEl.addEventListener('change', save);
   minPortfolioEl.addEventListener('change', save);
 }
 
@@ -1002,7 +1024,12 @@ function renderFreedom() {
 
   const banner = document.getElementById('freedom-result-banner');
   const totalDebtToday = state.loans.reduce((s, l) => s + (Number(l.amount) || 0), 0);
-  if (totalDebtToday <= 0) {
+  const autoSellOff = state.settings.auto_sell_enabled === false;
+  if (autoSellOff) {
+    banner.className = 'rounded-xl border p-4 mb-6 bg-slate-50 border-slate-300';
+    banner.innerHTML = `<p class="font-semibold text-slate-700">Automatický prodej nemovitostí je v Nastavení vypnutý.</p>
+      <p class="text-sm text-slate-600 mt-1">Zapni ho v kartě "Automatický prodej nemovitostí" v Nastavení, pokud chceš vidět plán prodejů na umoření dluhu.</p>`;
+  } else if (totalDebtToday <= 0) {
     banner.className = 'rounded-xl border p-4 mb-6 bg-emerald-50 border-emerald-300';
     banner.innerHTML = '<p class="font-semibold text-emerald-800">Portfolio už teď nemá žádný dluh.</p>';
   } else if (plan.debtFreeYear !== null) {
@@ -1016,7 +1043,9 @@ function renderFreedom() {
   }
 
   const eventsEl = document.getElementById('freedom-events');
-  if (!plan.events.length) {
+  if (autoSellOff) {
+    eventsEl.innerHTML = '<p class="text-slate-500">Automatický prodej je vypnutý - žádné prodeje se nesimulují.</p>';
+  } else if (!plan.events.length) {
     eventsEl.innerHTML = '<p class="text-slate-500">V tomhle horizontu není potřeba nic prodávat.</p>';
   } else {
     eventsEl.innerHTML = plan.events
@@ -1233,9 +1262,10 @@ function importBackup(e) {
       state.properties = Array.isArray(parsed.properties) ? parsed.properties : [];
       state.loans = Array.isArray(parsed.loans) ? parsed.loans : [];
       state.events = Array.isArray(parsed.events) ? parsed.events : [];
+      const defaultSettings = { inflation_rate: 0.03, rental_tax_rate: 15, capital_gains_tax_rate: 15, min_portfolio_value: 0, auto_sell_enabled: true, sale_trigger_amount: 0 };
       state.settings = parsed.settings && typeof parsed.settings.inflation_rate === 'number'
-        ? { inflation_rate: 0.03, rental_tax_rate: 15, capital_gains_tax_rate: 15, min_portfolio_value: 0, ...parsed.settings }
-        : { inflation_rate: 0.03, rental_tax_rate: 15, capital_gains_tax_rate: 15, min_portfolio_value: 0 };
+        ? { ...defaultSettings, ...parsed.settings }
+        : { ...defaultSettings };
       state.scenario = parsed.scenario && typeof parsed.scenario.horizonYears === 'number'
         ? parsed.scenario
         : { horizonYears: 20 };
@@ -1265,7 +1295,7 @@ async function clearAllData() {
   state.properties = [];
   state.loans = [];
   state.events = [];
-  state.settings = { inflation_rate: 0.03, rental_tax_rate: 15, capital_gains_tax_rate: 15, min_portfolio_value: 0 };
+  state.settings = { inflation_rate: 0.03, rental_tax_rate: 15, capital_gains_tax_rate: 15, min_portfolio_value: 0, auto_sell_enabled: true, sale_trigger_amount: 0 };
   state.scenario = { horizonYears: 20 };
   state.overview = { year: CURRENT_YEAR, period: 'year' };
   state.overviewReal = { year: CURRENT_YEAR, period: 'year' };
