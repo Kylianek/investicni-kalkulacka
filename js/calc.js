@@ -422,10 +422,20 @@ function projectPortfolio({ properties, loans, settings, events, horizonYears, s
   const first = rows[0];
   const last = rows[rows.length - 1];
 
-  // Růst MAJETKU (nemovitosti + hotovost) - na rozdíl od růstu vlastního
-  // kapitálu na dluh/páku vůbec nekouká, je to čisté zhodnocení aktiv.
-  const cagrAssets =
-    first.totalValue > 0 && last.totalValue > 0 ? Math.pow(last.totalValue / first.totalValue, 1 / horizonYears) - 1 : null;
+  // Růst hodnoty NEMOVITOSTÍ - čistá vážená sazba zhodnocení, složená za
+  // celý horizont ze skutečné avgGrowthRate jednotlivých let (rows[k], k < horizonYears).
+  // NESMÍ se počítat jako prosté porovnání celkové hodnoty na začátku/konci
+  // (last.totalValue / first.totalValue) - to by jako "růst" započítalo i
+  // kapitál vložený koupí DALŠÍ nemovitosti během horizontu (portfolio
+  // 1 mil. + koupě bytu za 1 mil. = "100% zhodnocení", i když se nezhodnotilo
+  // vůbec nic), případně vliv hotovostní rezervy/splácení dluhu. avgGrowthRate
+  // každého roku je naproti tomu čistý poměr appreciationGain ÷ realEstateValue
+  // toho roku, takže nově koupenou nemovitost nezkreslí.
+  let assetGrowthFactor = 1;
+  for (let k = 0; k < horizonYears; k++) {
+    assetGrowthFactor *= 1 + (Number(rows[k].avgGrowthRate) || 0);
+  }
+  const cagrAssets = Math.pow(assetGrowthFactor, 1 / horizonYears) - 1;
   // Prostý (nesložený) průměrný roční přírůstek vlastního kapitálu v Kč/rok.
   const avgAnnualEquityGrowth = (last.equity - first.equity) / horizonYears;
 

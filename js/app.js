@@ -904,16 +904,14 @@ function renderScenario() {
   document.getElementById('sc-kpi-start-equity').textContent = fmtMoney(summary.startEquity);
   document.getElementById('sc-kpi-end-debt').textContent = fmtMoney(last.totalDebt);
   document.getElementById('sc-kpi-avg-equity-growth').textContent = fmtMoney(summary.avgAnnualEquityGrowth);
-  document.getElementById('sc-kpi-cagr-assets').textContent = summary.cagrAssets === null ? '—' : fmtPercent(summary.cagrAssets);
+  document.getElementById('sc-kpi-cagr-assets').textContent = fmtPercent(summary.cagrAssets);
 
   setFormula('sc-kpi-start-equity-formula', `Majetek dnes (${fmtMoney(first.totalValue)}) − dluh dnes (${fmtMoney(first.totalDebt)}) = ${fmtMoney(first.equity)}`);
   setFormula('sc-kpi-end-debt-formula', `Součet zbývající jistiny všech úvěrů za ${horizon} let = ${fmtMoney(last.totalDebt)}. "Cizí kapitál" = peníze v nemovitostech, které ještě nejsou tvoje - jsou zastavené bance, dokud se úvěr nesplatí.`);
   setFormula('sc-kpi-avg-equity-growth-formula', `(Vlastní kapitál za ${horizon} let (${fmtMoney(summary.endEquity)}) − vlastní kapitál dnes (${fmtMoney(summary.startEquity)})) ÷ ${horizon} let = ${fmtMoney(summary.avgAnnualEquityGrowth)}/rok. Prostý (nesložený) průměr - kolik Kč ročně v průměru přibude na vlastním kapitálu.`);
   setFormula(
     'sc-kpi-cagr-assets-formula',
-    summary.cagrAssets === null
-      ? 'Nelze spočítat - majetek dnes musí být kladný.'
-      : `(majetek za ${horizon} let ÷ majetek dnes) ^ (1 ÷ ${horizon}) − 1 = (${fmtMoney(last.totalValue)} ÷ ${fmtMoney(first.totalValue)}) ^ (1/${horizon}) − 1 = ${fmtPercent(summary.cagrAssets)}. Čistý růst MAJETKU (nemovitosti + hotovost) - dluh/páka na tohle číslo vůbec nemá vliv, je to "kolik reálně rostou tvoje aktiva".`
+    `Složený průměr ročního zhodnocení nemovitostí za všech ${horizon} let (stejná sazba jako "Průměrné zhodnocení" na Přehledu, jen za celý horizont) = ${fmtPercent(summary.cagrAssets)}. Počítá se ze skutečné roční sazby zhodnocení, NE z porovnání celkové hodnoty portfolia na začátku a na konci - takže když si během horizontu koupíš další nemovitost, ten nákup se sem nepočítá jako "zhodnocení" (je to nový vklad, ne zisk).`
   );
 
   const chartEl = document.getElementById('scenario-chart');
