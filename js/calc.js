@@ -217,8 +217,12 @@ function projectPortfolio({ properties, loans, settings, events, horizonYears, s
     const activeProps = properties.filter(
       (p) => yearOf(p.acquisition_date, startYear) <= stateYear && !soldProperties.has(p.id)
     );
+    // Úvěr se počítá do dluhu portfolia až od svého skutečného data sjednání -
+    // stejná podmínka jako uvnitř amortizeLoanForYear (stateYear >= ls.startYear),
+    // jinak by se budoucí (ještě nesjednaný) úvěr počítal jako dluh už dnes.
+    const activeLoans = loans.filter((l) => stateYear >= loanState[l.id].startYear);
     const realEstateValue = activeProps.reduce((s, p) => s + curValue[p.id], 0);
-    const totalDebt = loans.reduce((s, l) => s + loanState[l.id].remainingPrincipal, 0);
+    const totalDebt = activeLoans.reduce((s, l) => s + loanState[l.id].remainingPrincipal, 0);
     const totalValue = realEstateValue + cashReserve;
     const equity = totalValue - totalDebt;
 
@@ -322,7 +326,7 @@ function projectPortfolio({ properties, loans, settings, events, horizonYears, s
     // se srovnává s AKTUÁLNÍ (už zhodnocenou) cenou nemovitostí k roku targetYear.
     cumulativeGain += appreciationGain;
     let soldThisYear = null;
-    const totalDebtNow = loans.reduce((s, l) => s + loanState[l.id].remainingPrincipal, 0);
+    const totalDebtNow = activeLoans.reduce((s, l) => s + loanState[l.id].remainingPrincipal, 0);
     const unsold = activeProps.filter((p) => curValue[p.id] > 0);
     if (totalDebtNow > 0.01 && unsold.length) {
       const cheapestValue = Math.min(...unsold.map((p) => curValue[p.id]));
@@ -335,8 +339,8 @@ function projectPortfolio({ properties, loans, settings, events, horizonYears, s
 
         cashReserve += chosen.netProceeds;
         soldProperties.add(chosen.property.id);
-        cashReserve = payDownDebtWithCash(loans, loanState, targetYear, cashReserve);
-        const totalDebtAfterSale = loans.reduce((s, l) => s + loanState[l.id].remainingPrincipal, 0);
+        cashReserve = payDownDebtWithCash(activeLoans, loanState, targetYear, cashReserve);
+        const totalDebtAfterSale = activeLoans.reduce((s, l) => s + loanState[l.id].remainingPrincipal, 0);
 
         soldThisYear = {
           saleYear: targetYear,
