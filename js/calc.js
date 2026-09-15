@@ -388,6 +388,11 @@ function projectPortfolio({ properties, loans, settings, events, horizonYears, s
             saleYear: targetYear,
             propertyId: chosen.property.id,
             propertyName: chosen.property.name,
+            // Cena v roce prodeje (už zhodnocená skládaným růstem od acquisitionPrice)
+            // a původní pořizovací cena, aby šlo v UI VIDĚT, že se neprodává za
+            // dnešní/pořizovací cenu, ale za tehdejší zhodnocenou tržní hodnotu.
+            marketValue: chosen.marketValue,
+            acquisitionPrice: Number(chosen.property.acquisition_price) || 0,
             saleProceeds: chosen.netProceeds,
             estimatedSaleTax: chosen.estimatedSaleTax,
             taxExempt: chosen.taxExempt,

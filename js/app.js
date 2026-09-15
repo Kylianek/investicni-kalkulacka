@@ -926,9 +926,10 @@ function renderScenario() {
     if (!r.soldThisYear) return '<td class="py-1.5 pr-3 text-xs text-slate-400"></td>';
     const s = r.soldThisYear;
     const taxNote = s.taxExempt ? 'bez daně - časový test splněn' : `po dani ${fmtMoney(s.estimatedSaleTax)}`;
+    const growthNote = s.acquisitionPrice > 0 ? `koupeno za ${fmtMoney(s.acquisitionPrice)} → zhodnoceno na ${fmtMoney(s.marketValue)} ke dni prodeje` : `tržní cena ke dni prodeje ${fmtMoney(s.marketValue)}`;
     return `<td class="py-1.5 pr-3 text-xs">
       <span class="font-medium text-blue-700">Prodej: ${escapeHtml(s.propertyName)}</span><br>
-      <span class="text-slate-500">za ${fmtMoney(s.saleProceeds)} (${taxNote}) - dluh naspořeným zhodnocením ${fmtMoney(s.triggeredByGain)}, ${s.loanFullyCleared ? 'tím byl celý zbývající dluh splacen' : 'použito na částečné splacení dluhu'}</span>
+      <span class="text-slate-500">${growthNote}, výtěžek ${fmtMoney(s.saleProceeds)} (${taxNote}) - spuštěno tím, že nastřádané zhodnocení portfolia dosáhlo ${fmtMoney(s.triggeredByGain)}, ${s.loanFullyCleared ? 'tím byl celý zbývající dluh splacen' : 'použito na částečné splacení dluhu'}</span>
     </td>`;
   };
 
@@ -1075,18 +1076,22 @@ function renderFreedom() {
     eventsEl.innerHTML = '<p class="text-slate-500">V tomhle horizontu není potřeba nic prodávat.</p>';
   } else {
     eventsEl.innerHTML = plan.events
-      .map(
-        (e) => `
+      .map((e) => {
+        const growthNote = e.acquisitionPrice > 0
+          ? `Koupeno za ${fmtMoney(e.acquisitionPrice)}, do roku prodeje zhodnoceno na ${fmtMoney(e.marketValue)}.`
+          : `Tržní cena ke dni prodeje ${fmtMoney(e.marketValue)}.`;
+        return `
       <div class="border-l-4 border-blue-400 pl-3">
         <p class="font-medium text-slate-800">${e.year}: prodej "${escapeHtml(e.propertyName)}"</p>
         <p class="text-xs text-slate-500">
           Spuštěno tím, že zhodnocení portfolia od posledního prodeje narostlo na ${fmtMoney(e.triggeredByGain)} - dost na to, aby se prodej vyplatil.
+          ${growthNote}
           Výtěžek ${fmtMoney(e.saleProceeds)}
           (${e.taxExempt ? 'bez daně z příjmu - časový test splněn' : 'po odhadované dani ' + fmtMoney(e.estimatedSaleTax)}) -
           ${e.loanFullyCleared ? 'veškerý zbývající dluh tím byl toho roku splacen.' : 'použito na částečné splacení dluhu, hotovost ' + fmtMoney(e.cashAfter) + ' zůstává na další splátky.'}
         </p>
-      </div>`
-      )
+      </div>`;
+      })
       .join('');
   }
 
